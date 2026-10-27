@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
+
+    <queries>
+        <package android:name="net.murilo.scanner"/>
+        <package android:name="com.android.vending"/>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.Material.Light">
+
+        <activity android:name=".InstallerActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="net.murilo.scanner.installer.apk"
+            android:exported="false"
+            android:grantUriPermissions="true"/>
+    </application>
+</manifest>

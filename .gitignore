@@ -1,0 +1,21 @@
+# Build
+build/
+*/build/
+.gradle/
+.cxx/
+
+# Local / máquina
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+
+# Ferramentas / rascunho
+.taste-skill/
+
+# SO
+.DS_Store
+Thumbs.db
