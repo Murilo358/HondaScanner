@@ -1,0 +1,18 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'net.murilo.scanner.installer'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'net.murilo.scanner.installer'
+        minSdk 23
+        targetSdk 34
+        versionCode 3
+        versionName '0.3'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes { release { minifyEnabled false } }
+}
+dependencies { }
