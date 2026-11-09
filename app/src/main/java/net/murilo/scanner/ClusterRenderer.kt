@@ -40,6 +40,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 110 }
     private val bgTexPaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
+    // limites de tamanho em px escalados pela densidade (senão ficam minúsculos em telas de alta resolução)
+    private val dens = context.resources.displayMetrics.density.coerceAtLeast(1f)
     private val font = numFont ?: Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     private var griffinBmp: Bitmap? = null
     private var bgTexBmp: Bitmap? = null
@@ -142,6 +144,9 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
         val sel = Layout.selected
         when {
+            // Em pé, todo layout embutido usa o arranjo retrato (os embutidos são deitados por natureza).
+            // Layouts personalizados usam coordenadas normalizadas e seguem o aparelho.
+            h > w && !Layout.isCustom(sel) -> drawAtualPe(c, w, h, d, rpmV, spdV, tmpV)
             sel == 1 -> drawAdapt(c, w, h, d, rpmV, spdV, tmpV)
             sel == 2 -> drawCartoes(c, w, h, d, rpmV, spdV, tmpV)
             sel == 3 -> drawDigital(c, w, h, d, rpmV, spdV, tmpV)
@@ -156,7 +161,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     /** Layout 7+: personalizado (widgets posicionados a mao). Reusa os mesmos mostradores do grifo. */
     private fun drawCustom(c: Canvas, w: Int, h: Int, d: Dash, widgets: List<Widget>?, rpmV: Float, spdV: Float, tmpV: Float) {
         if (widgets.isNullOrEmpty()) {
-            txt.color = cDim; txt.textAlign = Paint.Align.CENTER; txt.textSize = (h * 0.045f).coerceIn(16f, 34f)
+            txt.color = cDim; txt.textAlign = Paint.Align.CENTER; txt.textSize = (h * 0.045f).coerceIn(16f * dens, 34f * dens)
             c.drawText("Layout vazio — ☰ Personalizar ▸ Layout ▸ Editar", w / 2f, h / 2f, txt)
             return
         }
@@ -192,11 +197,11 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         txt.textAlign = Paint.Align.CENTER
         val hasLabel = label.isNotEmpty()
         if (hasLabel) {
-            txt.color = cDim; txt.textSize = (h * 0.24f).coerceIn(10f, 26f)
+            txt.color = cDim; txt.textSize = (h * 0.24f).coerceIn(10f * dens, 26f * dens)
             c.drawText(label, x + w / 2f, y + h * 0.34f, txt)
         }
         txt.color = cText
-        txt.textSize = (h * (if (hasLabel) 0.42f else 0.6f)).coerceIn(14f, 120f)
+        txt.textSize = (h * (if (hasLabel) 0.42f else 0.6f)).coerceIn(14f * dens, 120f * dens)
         val t = if (unit.isEmpty()) value else "$value $unit"
         c.drawText(t, x + w / 2f, if (hasLabel) y + h * 0.82f else y + h * 0.66f, txt)
     }
@@ -216,7 +221,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     private fun drawAtual(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
         if (h > w) { drawAtualPe(c, w, h, d, rpmV, spdV, tmpV); return }
         val topPad = h * 0.02f
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val clusterH = h - stripH - topPad
         val cy = topPad + clusterH / 2f
         val sidePad = w * 0.012f
@@ -238,14 +243,16 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     /** Layout 0 em pé: mesmos mostradores e extras, rearranjados para a tela em retrato. */
     private fun drawAtualPe(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.17f).coerceIn(96f, 220f)   // faixa de dados em 2 linhas
+        val stripH = (h * 0.17f).coerceIn(96f * dens, 220f * dens)   // faixa de dados em 2 linhas
         val topPad = h * 0.075f                         // espaço das luzes + relógio
-        val statsH = h * 0.055f                         // MÁX / combustível acima da faixa
+        val statsH = h * 0.13f                          // MÁX / combustível / status empilhados acima da faixa
         val areaH = h - stripH - topPad - statsH
-        val centerDia = minOf(w * 0.88f, areaH * 0.58f)
+        val centerDia = minOf(w * 0.90f, areaH * 0.58f)
         val sideDia = minOf(w * 0.47f, areaH * 0.44f)
         val cy1 = topPad + centerDia / 2f
-        val cy2 = cy1 + centerDia / 2f + sideDia / 2f - h * 0.005f
+        // relógios pequenos ancorados embaixo da área: um só respiro entre as fileiras, sem faixa morta
+        val cy2 = maxOf(cy1 + centerDia / 2f + sideDia / 2f - h * 0.005f,
+                        h - stripH - statsH - sideDia / 2f)
         dial(c, w / 2f, cy1, centerDia, 0f, 220f, SPD_MAJ, SPD_LBL, "KM/H", spdV.toInt().toString(), spdV, null, gearStr(d))
         dial(c, w * 0.26f, cy2, sideDia, 0f, 8000f, RPM_MAJ, RPM_LBL, "RPM", rpmV.toInt().toString(), rpmV, 7000f, null, shiftOrNull())
         dial(c, w * 0.74f, cy2, sideDia, 40f, 120f, TMP_MAJ, TMP_LBL, "°C", tmpV.toInt().toString(), tmpV, 108f, null)
@@ -260,7 +267,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     }
 
     private fun threeBig(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val areaH = h - stripH
         val cy = areaH / 2f + h * 0.01f
         val dia = min((w - 16f) / 3.02f, areaH * 1.10f)
@@ -274,10 +281,10 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     }
 
     private fun twoPlusBar(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val areaH = h - stripH
         val cy = areaH / 2f + h * 0.01f
-        val tbw = (w * 0.035f).coerceIn(22f, 48f); val tgap = w * 0.02f
+        val tbw = (w * 0.035f).coerceIn(22f * dens, 48f * dens); val tgap = w * 0.02f
         val avail = w - tbw - tgap - 16f
         val dia = min(avail / 2.05f, areaH * 1.06f)
         val gap = (avail - dia * 2f) / 3f
@@ -292,7 +299,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     /** Layout 2: cartoes quadrados (cada um com um mostrador + grifo). */
     private fun drawCartoes(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val topPad = h * 0.03f
         val gapC = w * 0.012f
         val cw = (w - 4 * gapC) / 3f
@@ -302,7 +309,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         for (i in 0..2) {
             val x0 = gapC + i * (cw + gapC)
             cardBox(c, x0, top, x0 + cw, top + chH, 18f)
-            txt.color = cDim; txt.textSize = (chH * 0.07f).coerceIn(12f, 22f); txt.textAlign = Paint.Align.CENTER
+            txt.color = cDim; txt.textSize = (chH * 0.07f).coerceIn(12f * dens, 22f * dens); txt.textAlign = Paint.Align.CENTER
             c.drawText(labels[i], x0 + cw / 2f, top + chH * 0.11f, txt)
             val dia = min(cw * 0.94f, chH * 0.80f)
             val gcx = x0 + cw / 2f; val gcy = top + chH * 0.56f
@@ -318,23 +325,23 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     /** Layout 3: digital minimalista (velocidade gigante + barra de RPM + marcha + temp). */
     private fun drawDigital(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val areaH = h - stripH
-        val barH = (h * 0.03f).coerceIn(10f, 22f)
+        val barH = (h * 0.03f).coerceIn(10f * dens, 22f * dens)
         hbar(c, w * 0.06f, h * 0.085f, w * 0.88f, barH, rpmV / 8000f, 7000f / 8000f)
-        txtL.color = cDim; txtL.textSize = (h * 0.03f).coerceIn(11f, 18f)
+        txtL.color = cDim; txtL.textSize = (h * 0.03f).coerceIn(11f * dens, 18f * dens)
         c.drawText("RPM ${rpmV.toInt()}", w * 0.06f, h * 0.085f - barH * 0.4f, txtL)
-        txtR.color = cDim; txtR.textSize = (h * 0.03f).coerceIn(11f, 18f)
+        txtR.color = cDim; txtR.textSize = (h * 0.03f).coerceIn(11f * dens, 18f * dens)
         c.drawText("8000", w * 0.94f, h * 0.085f - barH * 0.4f, txtR)
         val cyC = areaH * 0.52f
         blitGriffin(c, w * 0.40f, cyC, min(w, h) * 0.33f)
-        val bigSize = (h * 0.46f).coerceAtMost(240f)
+        val bigSize = (h * 0.46f).coerceAtMost(240f * dens)
         txt.color = cText; txt.textAlign = Paint.Align.CENTER; txt.textSize = bigSize
         c.drawText(spdV.toInt().toString(), w * 0.40f, cyC + bigSize * 0.34f, txt)
-        txt.color = cUnit; txt.textSize = (h * 0.055f).coerceIn(16f, 34f)
-        c.drawText("KM/H", w * 0.40f, cyC + bigSize * 0.34f + (h * 0.075f).coerceIn(20f, 44f), txt)
+        txt.color = cUnit; txt.textSize = (h * 0.055f).coerceIn(16f * dens, 34f * dens)
+        c.drawText("KM/H", w * 0.40f, cyC + bigSize * 0.34f + (h * 0.075f).coerceIn(20f * dens, 44f * dens), txt)
         // marcha chip
-        val chipS = (h * 0.26f).coerceIn(80f, 170f)
+        val chipS = (h * 0.26f).coerceIn(80f * dens, 170f * dens)
         val chx = w * 0.74f; val chy = cyC
         roundRect(c, chx - chipS / 2f, chy - chipS / 2f, chx + chipS / 2f, chy + chipS / 2f, chipS * 0.18f, Theme.lighten(cBg, 0.04f))
         stroke.color = cFaceEdge; stroke.strokeWidth = 2f
@@ -342,7 +349,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         txt.color = cText; txt.textSize = chipS * 0.6f; c.drawText(gearStr(d), chx, chy + chipS * 0.22f, txt)
         txt.color = cDim; txt.textSize = chipS * 0.14f; c.drawText("MARCHA", chx, chy - chipS * 0.28f, txt)
         // temp barra na esquerda
-        val tbw = (w * 0.03f).coerceIn(20f, 42f); val tbH = areaH * 0.6f
+        val tbw = (w * 0.03f).coerceIn(20f * dens, 42f * dens); val tbH = areaH * 0.6f
         tempBar(c, w * 0.08f, cyC - tbH / 2f, tbw, tbH, tmpV)
         strip(c, w, h, stripH, d)
         drawOverlays(c, w, h, d, stripH)
@@ -354,7 +361,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         val dia = min(h * 0.9f, w * 0.44f)
         val cxL = m + dia / 2f; val cyL = h * 0.52f
         dial(c, cxL, cyL, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
-        txt.color = cDim; txt.textAlign = Paint.Align.CENTER; txt.textSize = (h * 0.035f).coerceIn(12f, 20f)
+        txt.color = cDim; txt.textAlign = Paint.Align.CENTER; txt.textSize = (h * 0.035f).coerceIn(12f * dens, 20f * dens)
         c.drawText("RPM ${rpmV.toInt()}", cxL, h * 0.10f, txt)
         val wallX = cxL + dia / 2f + m; val wallTop = h * 0.17f; val wallW = w - wallX - m; val wallH = h * 0.78f
         dataWall(c, wallX, wallTop, wallW, wallH, d)
@@ -363,12 +370,12 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     /** Layout 5: Underground — tacometro central grande + cards laterais (com grifo). */
     private fun drawUnderground(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f, 160f)
+        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
         val areaH = h - stripH
         val cx = w / 2f; val cy = areaH * 0.56f
         val dia = min(areaH * 0.84f, w * 0.5f)
         dial(c, cx, cy, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
-        val cardW = (cx - dia / 2f - w * 0.03f).coerceIn(80f, 260f)
+        val cardW = (cx - dia / 2f - w * 0.03f).coerceIn(80f * dens, 260f * dens)
         val boost = (d.map - 1013f) / 1000f
         sideCard(c, w * 0.02f, areaH * 0.26f, cardW, areaH * 0.20f, if (boost >= 0f) "BOOST" else "VÁCUO", "${fmt2(abs(boost))} bar")
         sideCard(c, w * 0.02f, areaH * 0.52f, cardW, areaH * 0.20f, "TEMP", "${d.ect.toInt()}°C")
@@ -420,8 +427,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         c.drawRoundRect(RectF(x, y, x + w, y + h), 12f, 12f, fill)
         stroke.color = cFaceEdge; stroke.strokeWidth = 1.5f; c.drawRoundRect(RectF(x, y, x + w, y + h), 12f, 12f, stroke)
         txt.textAlign = Paint.Align.CENTER
-        txt.color = cDim; txt.textSize = (h * 0.26f).coerceIn(11f, 20f); c.drawText(label, x + w / 2f, y + h * 0.38f, txt)
-        txt.color = cText; txt.textSize = (h * 0.40f).coerceIn(15f, 32f); c.drawText(value, x + w / 2f, y + h * 0.80f, txt)
+        txt.color = cDim; txt.textSize = (h * 0.26f).coerceIn(11f * dens, 20f * dens); c.drawText(label, x + w / 2f, y + h * 0.38f, txt)
+        txt.color = cText; txt.textSize = (h * 0.40f).coerceIn(15f * dens, 32f * dens); c.drawText(value, x + w / 2f, y + h * 0.80f, txt)
     }
 
     private fun dataWall(c: Canvas, x: Float, y: Float, w: Float, h: Float, d: Dash) {
@@ -440,8 +447,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             c.drawRoundRect(RectF(cx0, cy0, cx0 + cw, cy0 + ch), 12f, 12f, fill)
             stroke.color = cFaceEdge; stroke.strokeWidth = 1.5f; c.drawRoundRect(RectF(cx0, cy0, cx0 + cw, cy0 + ch), 12f, 12f, stroke)
             txt.textAlign = Paint.Align.CENTER
-            txt.color = cDim; txt.textSize = (ch * 0.18f).coerceIn(11f, 22f); c.drawText(cells[i].first, cx0 + cw / 2f, cy0 + ch * 0.32f, txt)
-            txt.color = cells[i].third; txt.textSize = (ch * 0.34f).coerceIn(16f, 40f); c.drawText(cells[i].second, cx0 + cw / 2f, cy0 + ch * 0.72f, txt)
+            txt.color = cDim; txt.textSize = (ch * 0.18f).coerceIn(11f * dens, 22f * dens); c.drawText(cells[i].first, cx0 + cw / 2f, cy0 + ch * 0.32f, txt)
+            txt.color = cells[i].third; txt.textSize = (ch * 0.34f).coerceIn(16f * dens, 40f * dens); c.drawText(cells[i].second, cx0 + cw / 2f, cy0 + ch * 0.72f, txt)
         }
     }
 
@@ -556,41 +563,43 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     private fun drawOverlays(c: Canvas, w: Int, h: Int, d: Dash, stripH: Float) {
         val m = h * 0.03f
-        // estatisticas (canto INFERIOR esquerdo, acima da faixa — longe do hamburger)
-        if (Feat.on("stats")) {
-            val fs = (h * 0.03f).coerceIn(12f, 22f)
-            val base = h - stripH - fs * 1.5f   // folga acima da faixa (nao encostar)
-            txtL.textSize = fs; txtL.color = cText
-            c.drawText("RPM ${maxRpm.toInt()}  ·  VEL ${maxSpeed.toInt()}  ·  TEMP ${maxEct.toInt()}°", m, base, txtL)
-            txtL.textSize = fs * 0.78f; txtL.color = cDim
-            c.drawText("MÁX", m, base - fs * 1.2f, txtL)
-        }
+        val portrait = h > w
+        // MÁX / combustivel / status / ECO: desenhados no fim por drawBottomInfo (em pe, empilhados)
         // relogio (canto superior direito) + boost embaixo
         if (Feat.on("clock")) {
-            val cs = (h * 0.045f).coerceIn(14f, 30f)
+            val cs = (h * 0.045f).coerceIn(14f * dens, 30f * dens)
             txtR.textSize = cs; txtR.color = cText
             c.drawText(clockStr(), w - m, m + cs, txtR)
         }
         if (Feat.on("boost")) {
-            val bs = (h * 0.03f).coerceIn(11f, 20f)
+            val bs = (h * 0.03f).coerceIn(11f * dens, 20f * dens)
             val boost = (d.map - 1013f) / 1000f
             val lbl = if (boost >= 0f) "BOOST" else "VÁCUO"
             txtR.textSize = bs; txtR.color = cUnit
-            val cs = if (Feat.on("clock")) (h * 0.045f).coerceIn(14f, 30f) else 0f
+            val cs = if (Feat.on("clock")) (h * 0.045f).coerceIn(14f * dens, 30f * dens) else 0f
             c.drawText("$lbl ${fmt2(abs(boost))} bar", w - m, m + cs + bs * 1.5f, txtR)
         }
-        // luzes de aviso (centro superior)
+        // luzes de aviso (centro superior; em pe, espremidas entre o hamburger e o relogio)
         if (Feat.on("tell")) {
-            val bs = (h * 0.042f).coerceIn(13f, 28f)
-            txt.textSize = bs; txt.textAlign = Paint.Align.CENTER
+            txt.textAlign = Paint.Align.CENTER
             val lbls = arrayOf("TEMP", "BAT", "MIL")
             val lit = booleanArrayOf(d.ect >= Feat.TEMP_WARN, d.battery in 5f..Feat.BAT_WARN, d.mil)
             val bgs = intArrayOf(0xFFD44E63.toInt(), 0xFFFFD600.toInt(), 0xFFFF9100.toInt())
             val fgs = intArrayOf(Color.WHITE, 0xFF06222E.toInt(), 0xFF06222E.toInt())
+            var bs = (h * (if (portrait) 0.030f else 0.042f)).coerceIn(11f * dens, 28f * dens)
+            val leftZone = if (portrait) 62f * dens else 0f   // botao hamburger (54dp + margem)
+            val rightZone = if (portrait && Feat.on("clock")) {
+                txtR.textSize = (h * 0.045f).coerceIn(14f * dens, 30f * dens); txtR.measureText(clockStr()) + m * 2f
+            } else 0f
+            val availW = w - leftZone - rightZone
+            txt.textSize = bs
+            var total = 0f; for (l in lbls) total += txt.measureText(l) + bs * 1.4f; total += bs * 0.5f * 2
+            if (total > availW) { bs *= availW / total; txt.textSize = bs }   // encolhe pra caber
             val padX = bs * 0.7f; val gap = bs * 0.5f; val bh = bs * 1.7f
             val ws = FloatArray(3) { txt.measureText(lbls[it]) + 2 * padX }
-            val total = ws.sum() + gap * 2
-            var bx = (w - total) / 2f; val by = h * 0.02f
+            total = ws.sum() + gap * 2
+            val by = h * (if (portrait) 0.018f else 0.02f)
+            var bx = leftZone + (availW - total) / 2f
             for (i in 0..2) {
                 val bw = ws[i]
                 roundRect(c, bx, by, bx + bw, by + bh, bh * 0.3f, if (lit[i]) bgs[i] else Theme.withAlpha(cText, 22))
@@ -605,7 +614,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             val lowbat = d.battery in 5f..Feat.BAT_ALERT
             if ((overheat || lowbat) && (System.currentTimeMillis() / 400L) % 2L == 0L) {
                 val msg = if (overheat) "⚠ TEMPERATURA ALTA" else "⚠ BATERIA BAIXA"
-                val fs = (h * 0.055f).coerceIn(16f, 38f)
+                val fs = (h * 0.055f).coerceIn(16f * dens, 38f * dens)
                 txt.textSize = fs; txt.textAlign = Paint.Align.CENTER
                 val bw = txt.measureText(msg) + fs * 1.6f; val bh = fs * 1.7f
                 val bx = (w - bw) / 2f; val byy = h * 0.12f
@@ -614,35 +623,12 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
                 c.drawText(msg, w / 2f, byy + bh * 0.66f, txt)
             }
         }
-        // ---- combustivel + aquecimento + ECO (direita, acima da faixa) ----
-        val lineH = (h * 0.045f).coerceIn(14f, 26f)
-        var ry = h - stripH - m
-        if (Feat.on("fuel")) {
-            val econ = if (d.economyKmL > 0f) String.format("%.1f km/L", d.economyKmL) else "-- km/L"
-            txtR.textSize = lineH * 0.82f; txtR.color = cText
-            c.drawText("COMB ${d.fuelPct.toInt()}%  ·  $econ  ·  ${d.autonomyKm.toInt()} km", w - m, ry, txtR)
-            ry -= lineH
-        }
-        if (Feat.on("tempind")) {
-            val lbl: String; val col: Int
-            when {
-                d.ect < Feat.WARMUP_TEMP -> { lbl = "FRIO — não forçar"; col = 0xFF49C0E0.toInt() }
-                d.ect < Feat.IDEAL_TEMP  -> { lbl = "AQUECENDO"; col = 0xFFFFB300.toInt() }
-                d.ect < Feat.TEMP_WARN   -> { lbl = "PRONTO"; col = 0xFF2DC06E.toInt() }
-                else                     -> { lbl = "QUENTE"; col = 0xFFD44E63.toInt() }
-            }
-            txtR.textSize = lineH * 0.82f; txtR.color = col
-            c.drawText("● $lbl", w - m, ry, txtR)
-            ry -= lineH
-        }
-        if (Feat.on("eco") && d.tps in 1f..35f && d.speed > 15f) {
-            txtR.textSize = lineH * 0.82f; txtR.color = 0xFF2DC06E.toInt()
-            c.drawText("ECO", w - m, ry, txtR)
-        }
+        // ---- MÁX / combustivel / status de temperatura / ECO (acima da faixa) ----
+        drawBottomInfo(c, w, h, d, stripH, m, portrait)
         // ---- aviso de RADAR (centro, abaixo das luzes) ----
         if (Feat.on("radar") && d.radarDistM in 0f..700f) {
             val near = d.radarDistM < 300f
-            val fs = (h * 0.052f).coerceIn(15f, 34f)
+            val fs = (h * 0.052f).coerceIn(15f * dens, 34f * dens)
             txt.textSize = fs; txt.textAlign = Paint.Align.CENTER
             val sp = if (d.radarMaxSpeed > 0) "  ${d.radarMaxSpeed}" else ""
             val msg = "◉ RADAR ${d.radarDistM.toInt()}m$sp"
@@ -652,6 +638,50 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             txt.color = if (near) Color.WHITE else 0xFF06222E.toInt()
             c.drawText(msg, w / 2f, by + bh * 0.68f, txt)
         }
+    }
+
+    /** MÁX, combustivel, status de temperatura e ECO — logo acima da faixa.
+     *  Deitado: MÁX na esquerda, o resto na direita (cabe de sobra). Em pe a largura e curta e os dois
+     *  lados se sobrepunham, entao fica tudo centralizado e empilhado. */
+    private fun drawBottomInfo(c: Canvas, w: Int, h: Int, d: Dash, stripH: Float, m: Float, portrait: Boolean) {
+        val lineH = (h * 0.045f).coerceIn(14f * dens, 26f * dens)
+        val fs = (h * 0.03f).coerceIn(12f * dens, 22f * dens)
+        val econ = if (d.economyKmL > 0f) String.format("%.1f km/L", d.economyKmL) else "-- km/L"
+        val fuelStr = "COMB ${d.fuelPct.toInt()}%  ·  $econ  ·  ${d.autonomyKm.toInt()} km"
+        val (tempStr, tempCol) = tempStatus(d)
+        val ecoOn = Feat.on("eco") && d.tps in 1f..35f && d.speed > 15f
+
+        if (portrait) {
+            txt.textAlign = Paint.Align.CENTER
+            var ry = h - stripH - m
+            if (ecoOn) { txt.textSize = lineH * 0.82f; txt.color = 0xFF2DC06E.toInt(); c.drawText("ECO", w / 2f, ry, txt); ry -= lineH }
+            if (Feat.on("fuel")) { txt.textSize = lineH * 0.82f; txt.color = cText; c.drawText(fuelStr, w / 2f, ry, txt); ry -= lineH }
+            if (Feat.on("tempind")) { txt.textSize = lineH * 0.82f; txt.color = tempCol; c.drawText("● $tempStr", w / 2f, ry, txt); ry -= lineH }
+            if (Feat.on("stats")) {
+                txt.textSize = fs * 0.95f; txt.color = cDim
+                c.drawText("MÁX  RPM ${maxRpm.toInt()}  ·  VEL ${maxSpeed.toInt()}  ·  TEMP ${maxEct.toInt()}°", w / 2f, ry, txt)
+            }
+            return
+        }
+
+        if (Feat.on("stats")) {
+            val base = h - stripH - fs * 1.5f   // folga acima da faixa (nao encostar)
+            txtL.textSize = fs; txtL.color = cText
+            c.drawText("RPM ${maxRpm.toInt()}  ·  VEL ${maxSpeed.toInt()}  ·  TEMP ${maxEct.toInt()}°", m, base, txtL)
+            txtL.textSize = fs * 0.78f; txtL.color = cDim
+            c.drawText("MÁX", m, base - fs * 1.2f, txtL)
+        }
+        var ry = h - stripH - m
+        if (Feat.on("fuel")) { txtR.textSize = lineH * 0.82f; txtR.color = cText; c.drawText(fuelStr, w - m, ry, txtR); ry -= lineH }
+        if (Feat.on("tempind")) { txtR.textSize = lineH * 0.82f; txtR.color = tempCol; c.drawText("● $tempStr", w - m, ry, txtR); ry -= lineH }
+        if (ecoOn) { txtR.textSize = lineH * 0.82f; txtR.color = 0xFF2DC06E.toInt(); c.drawText("ECO", w - m, ry, txtR) }
+    }
+
+    private fun tempStatus(d: Dash): Pair<String, Int> = when {
+        d.ect < Feat.WARMUP_TEMP -> "FRIO — não forçar" to 0xFF49C0E0.toInt()
+        d.ect < Feat.IDEAL_TEMP  -> "AQUECENDO" to 0xFFFFB300.toInt()
+        d.ect < Feat.TEMP_WARN   -> "PRONTO" to 0xFF2DC06E.toInt()
+        else                     -> "QUENTE" to 0xFFD44E63.toInt()
     }
 
     private fun clockStr(): String {
@@ -670,8 +700,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         val ch = stripH / rows
         stroke.color = cLine; stroke.strokeWidth = 1.5f
         for (r in 0 until rows) c.drawLine(0f, top + r * ch, w.toFloat(), top + r * ch, stroke)
-        val labelSize = (ch * 0.26f).coerceAtMost(18f)
-        val valueSize = (ch * 0.44f).coerceAtMost(30f)
+        val labelSize = (ch * 0.26f).coerceAtMost(18f * dens)
+        val valueSize = (ch * 0.44f).coerceAtMost(30f * dens)
         for (i in labels.indices) {
             val col = i % cols
             val cellTop = top + (i / cols) * ch
