@@ -22,9 +22,9 @@ jobs:
           java-version: '17'   # obrigatório: o build quebra com Java mais novo
 
       - uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK (plataforma 35 + build-tools)
-        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        with:
+          # lista explícita: o padrão da action inclui 'tools', que o Google removeu do SDK
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Gerar instalador (app embutido) — mesmo fluxo do build-installer.sh
         run: |
