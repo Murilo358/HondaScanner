@@ -43,6 +43,9 @@ class MainActivity : Activity() {
     private var sim: Simulator? = null
     private var recording = false
     private lateinit var ham: Button
+    private lateinit var statusChip: TextView
+    private val RETRY_SECS = 6
+    private var countdown = RETRY_SECS
     private var customizer: LinearLayout? = null
     private var menuOverlay: View? = null
     private var menuCat = 0
@@ -65,6 +68,17 @@ class MainActivity : Activity() {
         }
         root.addView(ham, FrameLayout.LayoutParams(dp(54), dp(54), Gravity.TOP or Gravity.START).apply {
             setMargins(dp(10), dp(10), 0, 0)
+        })
+
+        // indicador de conexão (contagem até a próxima tentativa / status); toque = tentar agora
+        statusChip = TextView(this).apply {
+            textSize = 13f; setTextColor(Color.parseColor("#c9f2f4"))
+            background = pill(Color.parseColor("#33000000"))
+            setPadding(dp(14), dp(7), dp(14), dp(7)); visibility = View.GONE
+            setOnClickListener { attemptNow() }
+        }
+        root.addView(statusChip, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(12)
         })
 
         setContentView(root)
@@ -111,9 +125,48 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 23 && !GpsProvider.hasPerm(this))
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2)
 
-        // auto-conectar ao ultimo scanner (se ja tem permissao e um salvo); senao, usa o menu Conectar
+        // conexão automática (vem ligada): tenta ao abrir e o ticker reata sozinho depois
+        if (ScannerConnector.isAutoConnect(this))
+            client = ScannerConnector.autoConnect(this, view.dash,
+                { view.postInvalidate() }, { runOnUiThread { view.postInvalidate() } })
+        view.postDelayed(connTick, 1000)
+    }
+
+    // ticker de 1s: mostra o status/contagem na tela e, com a conexão automática ligada,
+    // reata a cada RETRY_SECS enquanto não houver scanner nem simulação.
+    private val connTick = object : Runnable {
+        override fun run() { updateConnChip(); view.postDelayed(this, 1000) }
+    }
+
+    private fun startAutoConnect() {
+        statusChip.text = "Conectando…"
         client = ScannerConnector.autoConnect(this, view.dash,
             { view.postInvalidate() }, { runOnUiThread { view.postInvalidate() } })
+        countdown = RETRY_SECS
+    }
+
+    /** Toque no indicador: tenta conectar na hora. */
+    private fun attemptNow() {
+        if (sim?.running == true || view.dash.connected) return
+        startAutoConnect()
+    }
+
+    private fun updateConnChip() {
+        if (sim?.running == true || view.dash.connected) {
+            statusChip.visibility = View.GONE; countdown = RETRY_SECS; return
+        }
+        if (!ScannerConnector.isAutoConnect(this)) {
+            statusChip.text = "Conexão automática desligada — toque para conectar"
+            statusChip.visibility = View.VISIBLE; return
+        }
+        if (Shared.client?.isRunning == true) {               // já está tentando/conectando
+            statusChip.text = view.dash.statusMsg.ifBlank { "Conectando…" }
+            statusChip.visibility = View.VISIBLE; countdown = RETRY_SECS; return
+        }
+        countdown -= 1                                        // ocioso: conta até a próxima tentativa
+        if (countdown <= 0) startAutoConnect()
+        else statusChip.text = "Tentando conectar ao scanner em ${countdown}s"
+        statusChip.visibility = View.VISIBLE
     }
 
     private fun pill(color: Int) = GradientDrawable().apply {
@@ -157,10 +210,10 @@ class MainActivity : Activity() {
             // cabeçalho: nome da categoria com filete vermelho do tamanho do rótulo + ✕
             val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) }
-            titleCol.addView(TextView(this).apply { text = cats[i].first; setTextColor(Color.WHITE); textSize = 17f; setTypeface(typeface, android.graphics.Typeface.BOLD) })
+            titleCol.addView(TextView(this).apply { text = cats[i].first; setTextColor(Color.WHITE); textSize = 20f; setTypeface(typeface, android.graphics.Typeface.BOLD) })
             titleCol.addView(View(this).apply { setBackgroundColor(ac); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(1)).apply { topMargin = dp(3); width = dp(40) } })
             head.addView(titleCol)
-            head.addView(TextView(this).apply { text = "✕"; setTextColor(mut); textSize = 17f; setPadding(dp(10), dp(4), dp(4), dp(4)); setOnClickListener { hideMenu() } })
+            head.addView(TextView(this).apply { text = "✕"; setTextColor(mut); textSize = 20f; setPadding(dp(12), dp(4), dp(6), dp(4)); setOnClickListener { hideMenu() } })
             contCol.addView(head)
             contCol.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8)) })
             if (i == 4) buildMenuColors(contCol) else buildCatList(contCol, i, mut)
@@ -225,29 +278,37 @@ class MainActivity : Activity() {
                 Dest("Personalizar", null) { hideMenu(); showCustomizer() },
                 Dest(if (sim?.running == true) "Parar simulação" else "Simular dados", null) { hideMenu(); toggleSim() },
                 Dest("Reiniciar marcha", null) { hideMenu(); GearDetector.reset(); toast("Marcha reiniciada") },
-                Dest(if (view.dash.connected) "Reconectar scanner" else "Conectar scanner", null) { hideMenu(); pickAndConnect() }
+                Dest(if (view.dash.connected) "Reconectar scanner" else "Conectar scanner", null) { hideMenu(); pickAndConnect() },
+                Dest("Conexão automática", if (ScannerConnector.isAutoConnect(this)) "ligada" else "desligada") {
+                    val on = !ScannerConnector.isAutoConnect(this)
+                    ScannerConnector.setAutoConnect(this, on)
+                    if (!on && !view.dash.connected) { client?.stop(); Shared.client = null; client = null }
+                    reopenMenu()
+                }
             )
+            // navegação NÃO fecha o menu: ao voltar da tela, o menu continua onde estava
             1 -> listOf(
-                Dest("Registro do sistema", if (TripLogger.active) "gravando" else "automático") { hideMenu(); startActivity(Intent(this, TripsActivity::class.java)) }
+                Dest("Registro do sistema", if (TripLogger.active) "gravando" else "automático") { startActivity(Intent(this, TripsActivity::class.java)) }
             )
             2 -> listOf(
-                Dest("Diagnóstico (DTC)", null) { hideMenu(); startActivity(Intent(this, DtcActivity::class.java)) },
-                Dest("Desempenho", null) { hideMenu(); startActivity(Intent(this, PerfActivity::class.java)) },
-                Dest("Relatório / Saúde", null) { hideMenu(); startActivity(Intent(this, ReportActivity::class.java)) },
-                Dest("Combustível · Alertas", null) { hideMenu(); startActivity(Intent(this, SettingsActivity::class.java)) }
+                Dest("Diagnóstico (DTC)", null) { startActivity(Intent(this, DtcActivity::class.java)) },
+                Dest("Desempenho", null) { startActivity(Intent(this, PerfActivity::class.java)) },
+                Dest("Relatório / Saúde", null) { startActivity(Intent(this, ReportActivity::class.java)) },
+                Dest("Manutenção", if (Maint.anyOverdue()) "vencida" else null) { startActivity(Intent(this, MaintActivity::class.java)) },
+                Dest("Combustível · Alertas", null) { startActivity(Intent(this, SettingsActivity::class.java)) }
             )
             else -> listOf(
-                Dest("Radares no mapa", null) { hideMenu(); startActivity(Intent(this, RadarMapActivity::class.java)) },
-                Dest("Atualizar radares", "${RadarDb.size()}") { hideMenu(); showRadarMenu() }
+                Dest("Radares no mapa", null) { startActivity(Intent(this, RadarMapActivity::class.java)) },
+                Dest("Atualizar radares", "${RadarDb.size()}") { showRadarMenu() }
             )
         }
         for (d in items) {
             val r = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isClickable = true
-                setPadding(dp(2), dp(11), dp(2), dp(11)); setOnClickListener { d.go() }
+                setPadding(dp(2), dp(14), dp(2), dp(14)); setOnClickListener { d.go() }
             }
-            r.addView(TextView(this).apply { text = d.label; setTextColor(Color.WHITE); textSize = 16f; layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) })
-            if (d.count != null) r.addView(TextView(this).apply { text = d.count; setTextColor(mut); textSize = 14f; typeface = android.graphics.Typeface.MONOSPACE })
+            r.addView(TextView(this).apply { text = d.label; setTextColor(Color.WHITE); textSize = 18f; layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) })
+            if (d.count != null) r.addView(TextView(this).apply { text = d.count; setTextColor(mut); textSize = 15f; typeface = android.graphics.Typeface.MONOSPACE })
             parent.addView(r)
         }
     }
@@ -316,6 +377,7 @@ class MainActivity : Activity() {
     private fun chip(label: String, initialOn: Boolean, onChange: (Boolean) -> Unit): Button {
         val b = Button(this).apply {
             isAllCaps = false; textSize = 13f; setPadding(dp(12), dp(2), dp(12), dp(2))
+            minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { rightMargin = dp(6) }
@@ -341,6 +403,7 @@ class MainActivity : Activity() {
         }
         val content = FrameLayout(this)
         val tabsRow = rowH()
+        val tabsInner = rowH()
         val tabNames = listOf("Cores", "Fundo", "Elementos", "Shift", "Layout")
         val tabBtns = ArrayList<Button>()
         fun selectTab(i: Int) {
@@ -359,18 +422,29 @@ class MainActivity : Activity() {
         }
         tabNames.forEachIndexed { i, name ->
             val b = Button(this).apply {
-                text = name; isAllCaps = false; textSize = 13f; setPadding(dp(12), dp(2), dp(12), dp(2))
+                text = name; isAllCaps = false; textSize = 13f; setPadding(dp(11), dp(2), dp(11), dp(2))
+                // Button tem minWidth de 88dp por padrão: sem zerar, as 5 abas não cabem em pé
+                minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { rightMargin = dp(6) }
+                ).apply { rightMargin = dp(5) }
                 setOnClickListener { selectTab(i) }
             }
-            tabBtns.add(b); tabsRow.addView(b)
+            tabBtns.add(b); tabsInner.addView(b)
         }
-        tabsRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        // em pé as abas não cabem todas: ficam roláveis, com o Pronto sempre visível
+        tabsRow.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; addView(tabsInner)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         tabsRow.addView(Button(this).apply {
-            text = "✓ Pronto"; isAllCaps = false; textSize = 14f; setTextColor(Color.parseColor("#06220e"))
-            background = pill(Color.parseColor("#2dc06e")); setPadding(dp(16), dp(2), dp(16), dp(2))
+            text = "✓"; isAllCaps = false; textSize = 17f; setTextColor(Color.parseColor("#06220e"))
+            background = pill(Color.parseColor("#2dc06e"))
+            minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
+            setPadding(dp(14), 0, dp(14), 0)
+            contentDescription = "Pronto"
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = dp(6) }
             setOnClickListener { hideCustomizer() }
         })
         panel.addView(tabsRow)
@@ -494,6 +568,7 @@ class MainActivity : Activity() {
     private fun smallBtn(label: String, onClick: () -> Unit) = Button(this).apply {
         text = label; isAllCaps = false; textSize = 12.5f; setTextColor(Color.parseColor("#c9f2f4"))
         background = pill(Color.parseColor("#33ffffff")); setPadding(dp(11), dp(2), dp(11), dp(2))
+        minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { rightMargin = dp(6); topMargin = dp(2) }
@@ -536,7 +611,13 @@ class MainActivity : Activity() {
         refresh = { label.text = "${Layout.labels[Layout.selected]}   (${Layout.selected + 1}/${Layout.labels.size})"; rebuildButtons() }
         fun cycle(d: Int) { val n = Layout.labels.size; Layout.set(((Layout.selected + d) % n + n) % n); refresh(); view.postInvalidate() }
         row.addView(arrowBtn("◀") { cycle(-1) }); row.addView(label); row.addView(arrowBtn("▶") { cycle(1) })
-        col.addView(row); col.addView(btnRow); refresh()
+        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row) })
+        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(btnRow) })
+        col.addView(TextView(this).apply {
+            text = "Com a tela em pé o painel usa o arranjo retrato; os layouts aparecem com a tela deitada."
+            setTextColor(Color.parseColor("#8A8C92")); textSize = 12f; setPadding(dp(2), dp(8), 0, 0)
+        })
+        refresh()
         return col
     }
 
@@ -567,10 +648,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.parseColor("#ee0a141d")); setPadding(dp(10), dp(6), dp(10), dp(8)); elevation = dp(12).toFloat()
         }
         bar.addView(TextView(this).apply { text = "✎ ${lay.name}"; setTextColor(Color.parseColor("#eaf4ff")); textSize = 14f; setPadding(0, 0, dp(10), 0) })
-        bar.addView(smallBtn("＋ Adicionar") { addWidgetDialog() })
-        bar.addView(smallBtn("🗑 Apagar") { editOverlay?.delSel() })
-        bar.addView(smallBtn("🧲 Grade") { editOverlay?.let { it.snap = !it.snap; toast("Encaixe " + if (it.snap) "ligado" else "desligado") } })
-        bar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val tools = rowH()
+        tools.addView(smallBtn("＋ Adicionar") { addWidgetDialog() })
+        tools.addView(smallBtn("🗑 Apagar") { editOverlay?.delSel() })
+        tools.addView(smallBtn("🧲 Grade") { editOverlay?.let { it.snap = !it.snap; toast("Encaixe " + if (it.snap) "ligado" else "desligado") } })
+        bar.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; addView(tools)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         bar.addView(Button(this).apply {
             text = "✓ Sair"; isAllCaps = false; textSize = 14f; setTextColor(Color.parseColor("#06220e"))
             background = pill(Color.parseColor("#2dc06e")); setPadding(dp(16), dp(2), dp(16), dp(2))
@@ -717,23 +801,31 @@ class MainActivity : Activity() {
 
     @SuppressLint("MissingPermission")
     private fun pickAndConnect() {
-        if (needPerm()) return
         sim?.stop()
+        // na central NWD o Bluetooth é do fabricante (não aparece no pareamento do Android) -> conecta direto
+        if (NwdSppTransport.present(this)) {
+            startWith(NwdSppTransport(this)); toast("Conectando pelo Bluetooth da central…"); return
+        }
+        if (needPerm()) return
         val adapter: BluetoothAdapter? = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (adapter == null || !adapter.isEnabled) { toast("Ligue o Bluetooth"); return }
         val devices = adapter.bondedDevices.toList()
         if (devices.isEmpty()) { toast("Nenhum dispositivo pareado"); return }
         val names = devices.map { "${it.name}\n${it.address}" }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Escolha o scanner").setItems(names) { _, i ->
-            client?.stop()
             ScannerConnector.saveLast(this, devices[i].address)
-            client = ScannerClient(devices[i], view.dash,
-                onUpdate = { view.postInvalidate() },
-                onStatus = { runOnUiThread { view.postInvalidate() } })
-            Shared.client = client
-            if (recording) startLog()
-            client!!.start()
+            startWith(SocketTransport(devices[i]))
         }.show()
+    }
+
+    private fun startWith(transport: ScannerTransport) {
+        client?.stop()
+        client = ScannerClient(transport, view.dash,
+            onUpdate = { view.postInvalidate() },
+            onStatus = { runOnUiThread { view.postInvalidate() } })
+        Shared.client = client
+        if (recording) startLog()
+        client!!.start()
     }
 
     private fun toggleRecord() {
@@ -751,7 +843,7 @@ class MainActivity : Activity() {
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
-    override fun onDestroy() { super.onDestroy(); client?.stop(); sim?.stop() }
+    override fun onDestroy() { super.onDestroy(); view.removeCallbacks(connTick); client?.stop(); sim?.stop() }
 }
 
 /** Compartilha o estado com o servico do Android Auto. */

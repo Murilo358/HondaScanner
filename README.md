@@ -5,6 +5,8 @@ de instrumentos ao vivo — no **celular** e no **Android Auto** da multimídia.
 
 - Pacote: `net.murilo.scanner`
 - Comunicação: Bluetooth SPP/RFCOMM. Leitura `20 05 <addr> <len> <ck>`, resposta `00 <L> <dados> <ck>`; limpar DTC `21 04 01 <ck>`.
+- Conecta pelo Bluetooth normal (celular) **ou** pelo Bluetooth da própria multimídia (central NWD),
+  escolhido automaticamente. Reconexão automática com indicador na tela principal. Veja abaixo.
 - Sem conta, sem nuvem, sem chave de API. Dados ficam só no aparelho.
 
 ---
@@ -93,6 +95,30 @@ adb shell "run-as net.murilo.scanner tar x -C /data/data/net.murilo.scanner" < b
 
 ---
 
+## Bluetooth da central (multimídia NWD)
+
+Algumas multimídias (ex.: **central NWD K2401**, a que roda o Android Auto deste projeto) **não
+expõem a pilha Bluetooth padrão do Android** — apps comuns não enxergam o rádio. Quem controla o
+Bluetooth é um serviço do fabricante (`com.bt.*`), o mesmo que o app "Ferramentas → Conectar OBD"
+da central usa.
+
+O Scanner detecta isso em tempo de execução e escolhe o transporte sozinho (**mesmo APK nos dois**):
+
+- **Celular / tablet:** Bluetooth normal (RFCOMM/SPP no aparelho pareado) — `SocketTransport`.
+- **Central NWD:** fala com o serviço do fabricante (`com.bt.ACTION_START_SERVICE` → binder
+  `com.bt.BTFeature`, SPP cru) — `NwdSppTransport` (`NwdSpp.kt`). O app nem pede permissão de BT
+  (o serviço da central faz o trabalho). O scanner precisa se chamar OBD/VHM/CAR e usar PIN `1234`.
+
+**Reconexão automática** vem **ligada**: a tela principal mostra no topo a contagem até a próxima
+tentativa ("Tentando conectar ao scanner em Ns") e vira "Conectando…" enquanto tenta; toque para
+tentar na hora. Liga/desliga em **Menu → Painel → Conexão automática**.
+
+> Status: o caminho da central foi reconstruído por engenharia reversa do firmware oficial e
+> **ainda precisa ser validado no hardware** (no celular o app cai no Bluetooth normal). Os códigos
+> de transação do binder têm que bater com a versão do serviço instalada na central.
+
+---
+
 ## Estrutura do projeto
 
 ```
@@ -133,6 +159,7 @@ AplicativoScanner/
 **Carro / comunicação / lógica**
 - `CarApp.kt` — entrada do Android Auto (`DashCarAppService`, telas do AA, `HostValidator` ALLOW_ALL).
 - `ScannerClient.kt` / `ScannerConnector.kt` / `Protocol.kt` — Bluetooth e protocolo OBD‑1.
+  `NwdSpp.kt` (+ `com/bt/BTDevice.kt`) — transporte pelo Bluetooth da central NWD (ver seção acima).
 - `Dash.kt` — estado do carro (todos os sensores). `GearDetector.kt` — detecção de marcha.
 - `FuelCalc.kt` — combustível/autonomia (ECU não manda nível; estima pela injeção).
 - `Simulator.kt` — dados falsos p/ testar sem o carro. `DemoTrip.kt` — semeia 1 viagem de exemplo.

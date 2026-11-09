@@ -13,9 +13,8 @@ import java.util.UUID
  * Conecta no scanner via Bluetooth SPP/RFCOMM e fica em polling dos blocos,
  * preenchendo o [Dash]. Opcionalmente grava um log cru (para mapear sensores).
  */
-@SuppressLint("MissingPermission")
 class ScannerClient(
-    private val device: BluetoothDevice,
+    private val transport: ScannerTransport,
     private val dash: Dash,
     private val onUpdate: () -> Unit,
     private val onStatus: (String) -> Unit,
@@ -24,7 +23,6 @@ class ScannerClient(
     @Volatile private var running = false
     val isRunning: Boolean get() = running
     private var thread: Thread? = null
-    private var socket: BluetoothSocket? = null
 
     @Volatile var logFile: File? = null   // se != null, grava cada bloco
     @Volatile var clearDtcRequested = false   // setar p/ enviar o comando de limpar DTC no proximo ciclo
@@ -37,7 +35,7 @@ class ScannerClient(
 
     fun stop() {
         running = false
-        try { socket?.close() } catch (_: Exception) {}
+        try { transport.close() } catch (_: Exception) {}
         thread?.interrupt()
     }
 
@@ -46,11 +44,7 @@ class ScannerClient(
         while (running) {
             try {
                 status("Conectando…")
-                val s = device.createRfcommSocketToServiceRecord(UUID.fromString(Protocol.SPP_UUID))
-                socket = s
-                s.connect()
-                val input = s.inputStream
-                val output = s.outputStream
+                val (input, output) = transport.open()
                 dash.connected = true
                 status("Conectado")
                 drain(input, 300)
@@ -82,7 +76,7 @@ class ScannerClient(
                 if (running) status("Reconectando…")
             } finally {
                 dash.connected = false
-                try { socket?.close() } catch (_: Exception) {}
+                try { transport.close() } catch (_: Exception) {}
             }
             if (running) try { Thread.sleep(1500) } catch (_: Exception) {}
         }
@@ -132,4 +126,28 @@ class ScannerClient(
     }
 
     private fun status(s: String) { dash.statusMsg = s; onStatus(s) }
+}
+
+/** Como o [ScannerClient] abre o canal de dados: socket RFCOMM (celular) ou SPP da central NWD. */
+interface ScannerTransport {
+    val label: String
+    /** Bloqueia até conectar; devolve os streams de leitura/escrita ou lança em caso de falha. */
+    fun open(): Pair<InputStream, OutputStream>
+    fun close()
+}
+
+/** Bluetooth normal do Android (celular): RFCOMM/SPP direto no aparelho pareado. */
+@SuppressLint("MissingPermission")
+class SocketTransport(private val device: BluetoothDevice) : ScannerTransport {
+    override val label: String get() = device.name ?: device.address
+    private var socket: BluetoothSocket? = null
+
+    override fun open(): Pair<InputStream, OutputStream> {
+        val s = device.createRfcommSocketToServiceRecord(UUID.fromString(Protocol.SPP_UUID))
+        socket = s
+        s.connect()
+        return s.inputStream to s.outputStream
+    }
+
+    override fun close() { try { socket?.close() } catch (_: Exception) {} }
 }
