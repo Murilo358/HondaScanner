@@ -14,17 +14,33 @@ import android.os.Build
 object ScannerConnector {
     private const val PREF = "scanner_prefs"
     private const val KEY_ADDR = "last_device"
+    private const val KEY_SPP = "spp_mac"
+    private const val KEY_AUTO = "auto_connect"
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
     fun saveLast(ctx: Context, address: String) {
-        try {
-            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-                .putString(KEY_ADDR, address).apply()
-        } catch (_: Exception) {}
+        try { prefs(ctx).edit().putString(KEY_ADDR, address).apply() } catch (_: Exception) {}
     }
 
     fun lastAddress(ctx: Context): String? =
-        try { ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_ADDR, null) }
-        catch (_: Exception) { null }
+        try { prefs(ctx).getString(KEY_ADDR, null) } catch (_: Exception) { null }
+
+    /** MAC do scanner OBD já conectado pela central (reconecta direto sem procurar de novo). */
+    fun saveSppMac(ctx: Context, mac: String) {
+        try { prefs(ctx).edit().putString(KEY_SPP, mac).apply() } catch (_: Exception) {}
+    }
+
+    fun sppMac(ctx: Context): String? =
+        try { prefs(ctx).getString(KEY_SPP, null) } catch (_: Exception) { null }
+
+    /** Conectar automaticamente ao abrir / ficar tentando. Vem LIGADO por padrão. */
+    fun isAutoConnect(ctx: Context): Boolean =
+        try { prefs(ctx).getBoolean(KEY_AUTO, true) } catch (_: Exception) { true }
+
+    fun setAutoConnect(ctx: Context, on: Boolean) {
+        try { prefs(ctx).edit().putBoolean(KEY_AUTO, on).apply() } catch (_: Exception) {}
+    }
 
     fun hasPerm(ctx: Context): Boolean =
         Build.VERSION.SDK_INT < 31 ||
@@ -37,14 +53,22 @@ object ScannerConnector {
     @SuppressLint("MissingPermission")
     fun autoConnect(ctx: Context, dash: Dash, onUpdate: () -> Unit, onStatus: (String) -> Unit): ScannerClient? {
         if (Shared.client?.isRunning == true) return Shared.client
+        val transport = chooseTransport(ctx) ?: return null
+        val c = ScannerClient(transport, dash, onUpdate, onStatus)
+        Shared.client = c
+        c.start()
+        return c
+    }
+
+    /** Central NWD → usa o Bluetooth do fabricante (BTFeature); celular → RFCOMM no aparelho pareado. */
+    @SuppressLint("MissingPermission")
+    fun chooseTransport(ctx: Context): ScannerTransport? {
+        if (NwdSppTransport.present(ctx)) return NwdSppTransport(ctx)
         if (!hasPerm(ctx)) return null
         val addr = lastAddress(ctx) ?: return null
         val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: return null
         if (!adapter.isEnabled) return null
         val dev = adapter.bondedDevices?.firstOrNull { it.address == addr } ?: return null
-        val c = ScannerClient(dev, dash, onUpdate, onStatus)
-        Shared.client = c
-        c.start()
-        return c
+        return SocketTransport(dev)
     }
 }
