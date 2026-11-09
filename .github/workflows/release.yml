@@ -1,0 +1,52 @@
+name: Release APK
+
+# Gera o APK no GitHub e anexa num Release.
+# Dispara ao enviar uma tag "v*" (ex.: v0.29) ou manualmente (aba Actions → Run workflow).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necessário para criar o Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'   # obrigatório: o build quebra com Java mais novo
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK (plataforma 35 + build-tools)
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gerar instalador (app embutido) — mesmo fluxo do build-installer.sh
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk installer/src/main/assets/Scanner.apk
+          ./gradlew :installer:assembleDebug
+
+      - name: Nomear APKs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk             "dist/Scanner-${{ github.ref_name }}.apk"
+          cp installer/build/outputs/apk/debug/installer-debug.apk  "dist/Scanner-Instalador-${{ github.ref_name }}.apk"
+
+      - uses: actions/upload-artifact@v4   # baixável mesmo sem tag (run manual)
+        with:
+          name: apks
+          path: dist/*.apk
+
+      - name: Publicar Release com os APKs
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          generate_release_notes: true
