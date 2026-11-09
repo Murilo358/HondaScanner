@@ -38,25 +38,25 @@
         </activity>
 
         <activity android:name=".TripsActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".TripReplayActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".DtcActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".PerfActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".ReportActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".MaintActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".RadarMapActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".SettingsActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".DatalogActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".RouteMapActivity" android:exported="false"
-            android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|keyboardHidden"/>
 
         <provider
             android:name="androidx.core.content.FileProvider"

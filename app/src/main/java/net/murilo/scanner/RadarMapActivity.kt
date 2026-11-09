@@ -24,6 +24,7 @@ import org.osmdroid.views.overlay.Overlay
 class RadarMapActivity : Activity() {
     private lateinit var map: MapView
     private lateinit var info: TextView
+    private lateinit var warnLine: TextView
     private val h = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,12 +33,13 @@ class RadarMapActivity : Activity() {
         Configuration.getInstance().load(this, getSharedPreferences("osmdroid", MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = packageName
 
-        val cyan = Color.parseColor("#C9F2F4")
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0A141D")) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
 
+        root.addView(Ui.header(this, "Radares", null) { finish() }.apply {
+            setPadding(pad(16), pad(12), pad(16), pad(4))
+        })
         info = TextView(this).apply {
-            setTextColor(cyan); textSize = 14f; setPadding(pad(12), pad(10), pad(12), pad(10))
-            setBackgroundColor(Color.parseColor("#0F1C27"))
+            setTextColor(Ui.MUTED); textSize = 12f; setPadding(pad(18), 0, pad(16), pad(10))
         }
         root.addView(info)
 
@@ -48,10 +50,19 @@ class RadarMapActivity : Activity() {
         }
         root.addView(map, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(pad(8), pad(6), pad(8), pad(6)); gravity = Gravity.CENTER }
-        bar.addView(btn("📍 Onde estou") { centerOnMe() })
-        bar.addView(btn("↻ Atualizar radares") { downloadPardal() })
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(pad(12), pad(10), pad(12), pad(4)); gravity = Gravity.CENTER }
+        bar.addView(Ui.pill(this, "Onde estou", primary = false) { centerOnMe() }, barLp())
+        bar.addView(Ui.pill(this, "Atualizar radares", primary = true) { downloadPardal() }, barLp())
         root.addView(bar)
+
+        warnLine = TextView(this).apply {
+            textSize = 12f; gravity = Gravity.CENTER; setPadding(pad(16), pad(6), pad(16), pad(10))
+            setOnClickListener {
+                val on = !Feat.on("radar"); Feat.toggle("radar", on); refreshWarnLine()
+            }
+        }
+        refreshWarnLine()
+        root.addView(warnLine)
 
         setContentView(root)
 
@@ -118,14 +129,16 @@ class RadarMapActivity : Activity() {
         map.invalidate()
     }
 
-    private fun btn(label: String, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = label; isAllCaps = false; textSize = 13f
-            setTextColor(Color.parseColor("#C9F2F4")); setBackgroundColor(Color.parseColor("#12283A"))
-            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(pad(4), 0, pad(4), 0) }
-            layoutParams = lp
-            setOnClickListener { onClick() }
-        }
+    private fun barLp() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+        setMargins(pad(4), 0, pad(4), 0)
+    }
+
+    private fun refreshWarnLine() {
+        val on = Feat.on("radar")
+        warnLine.setTextColor(if (on) Ui.FAINT else Ui.WARN)
+        warnLine.text = if (on) "Aviso sonoro e no painel quando um radar estiver à frente: ligado — toque para desligar"
+                        else "Aviso de radar desligado — toque para ligar"
+    }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
     private fun pad(dp: Int) = Math.round(dp * resources.displayMetrics.density)
