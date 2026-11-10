@@ -151,8 +151,8 @@ class NwdScan(ctx: Context) {
     private val found = LinkedHashMap<String, Dev>()   // por MAC, preserva a ordem de chegada
     @Volatile private var onChange: (() -> Unit)? = null
 
-    /** Liga no serviço e começa a procurar; [onChange] é chamado a cada aparelho novo/atualizado. */
-    fun start(onChange: () -> Unit): Boolean {
+    /** Liga no serviço; com [search] começa a procurar. [onChange] é chamado a cada aparelho novo/atualizado. */
+    fun start(search: Boolean = true, onChange: () -> Unit): Boolean {
         this.onChange = onChange
         val binder = bind() ?: return false
         feat = BtFeature(binder)
@@ -175,12 +175,23 @@ class NwdScan(ctx: Context) {
             addAction(NwdSppTransport.ACTION_PAIR_REC)
             addAction(NwdSppTransport.ACTION_CONN_CHANGE)
         })
-        try { feat?.getPairRecord() } catch (_: Exception) {}   // já pareados
-        try { feat?.startSearch() } catch (_: Exception) {}     // procura novos
+        try { feat?.getPairRecord() } catch (_: Exception) {}       // já pareados
+        if (search) try { feat?.startSearch() } catch (_: Exception) {}  // procura novos
         return true
     }
 
     fun devices(): List<Dev> = synchronized(found) { found.values.toList() }
+
+    /** Desconecta o scanner no rádio e REMOVE o pareamento (para a central não reconectar sozinha). */
+    fun forget(savedMac: String?) {
+        val connected = try { feat?.getConnectDevice() } catch (_: Exception) { null }
+        try { feat?.sppDisconnect() } catch (_: Exception) {}
+        try { feat?.disconnectDevice() } catch (_: Exception) {}
+        val idxs = LinkedHashSet<Int>()
+        connected?.let { idxs.add(it.pairRecordIndex) }
+        for (dv in devices()) dv.src?.let { if (savedMac == null || dv.mac == savedMac) idxs.add(it.pairRecordIndex) }
+        for (i in idxs) try { feat?.deletePairRecord(i) } catch (_: Exception) {}
+    }
 
     /** Pareia/conecta o escolhido com o [pin] e salva o MAC pro transporte reconectar. */
     fun choose(dev: Dev, pin: String): String {
@@ -234,9 +245,19 @@ private class BtFeature(private val b: IBinder) {
     fun unregistCb(cb: IBinder) = callVoid(41) { it.writeStrongBinder(cb) }
     fun setPinCode(pin: String) = callVoid(11) { it.writeString(pin) }
     fun connectDevice(dev: BTDevice): Boolean = callBool(4) { it.writeInt(1); dev.writeToParcel(it, 0) }
+    fun disconnectDevice(): Boolean = callBool(5) {}             // disConnectDevice_BC
     fun startSearch(): Boolean = callBool(7) {}
     fun stopSearch(): Boolean = callBool(8) {}
     fun getPairRecord(): Boolean = callBool(31) {}
+    fun deletePairRecord(index: Int): Boolean = callBool(32) { it.writeInt(index) }
+    fun getConnectDevice(): BTDevice? {
+        val d = Parcel.obtain(); val r = Parcel.obtain()
+        try {
+            d.writeInterfaceToken(NwdSppTransport.DESC_FEATURE)
+            b.transact(38, d, r, 0); r.readException()
+            return if (r.readInt() != 0) BTDevice.CREATOR.createFromParcel(r) else null
+        } finally { r.recycle(); d.recycle() }
+    }
     fun sppConnect(mac: String): Boolean = callBool(47) { it.writeString(mac) }
     fun sppDisconnect() = callVoid(48) {}
     fun isSppConnect(): Boolean = callBool(50) {}
