@@ -63,7 +63,8 @@ object ScannerConnector {
     /** Central NWD → usa o Bluetooth do fabricante (BTFeature); celular → RFCOMM no aparelho pareado. */
     @SuppressLint("MissingPermission")
     fun chooseTransport(ctx: Context): ScannerTransport? {
-        if (NwdSppTransport.present(ctx)) return NwdSppTransport(ctx)
+        // Central NWD: só reconecta sozinho num scanner já escolhido no seletor; senão espera a escolha.
+        if (NwdSppTransport.present(ctx)) return if (sppMac(ctx) != null) NwdSppTransport(ctx) else null
         if (!hasPerm(ctx)) return null
         val addr = lastAddress(ctx) ?: return null
         val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: return null

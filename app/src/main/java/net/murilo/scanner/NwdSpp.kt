@@ -42,8 +42,7 @@ class NwdSppTransport(ctx: Context) : ScannerTransport {
         f.registCb(cb)
         try { f.setPinCode(PIN) } catch (_: Exception) {}
 
-        val mac = resolveMac(f) ?: throw IOException("scanner OBD não encontrado no Bluetooth da central")
-        ScannerConnector.saveSppMac(app, mac)
+        val mac = resolveMac() ?: throw IOException("escolha o scanner no Bluetooth da central (menu Conectar)")
 
         if (!f.isSppConnect()) f.sppConnect(mac)
         val until = System.currentTimeMillis() + 8000
@@ -63,49 +62,8 @@ class NwdSppTransport(ctx: Context) : ScannerTransport {
         feat = null
     }
 
-    // --- descoberta do scanner ---
-    @Volatile private var foundMac: String? = null
-
-    private fun resolveMac(f: BtFeature): String? {
-        ScannerConnector.sppMac(app)?.let { return it }   // já conectou antes: reusa
-        foundMac = null
-        val rec = object : BroadcastReceiver() {
-            override fun onReceive(c: Context?, i: Intent?) {
-                when (i?.action) {
-                    ACTION_BT_DEVICE_FOUND -> {
-                        val n = i.getStringExtra(EXTRA_NAME) ?: ""
-                        val a = i.getStringExtra(EXTRA_ADDR)
-                        if (a != null && isObd(n)) foundMac = a
-                    }
-                    ACTION_PAIR_REC -> {
-                        @Suppress("DEPRECATION") val d = i.getParcelableExtra<BTDevice>(EXTRA_PAIR)
-                        if (d?.address != null && isObd(d.name ?: "")) foundMac = d.address
-                    }
-                }
-            }
-        }
-        app.registerReceiver(rec, IntentFilter().apply {
-            addAction(ACTION_PAIR_REC); addAction(ACTION_BT_DEVICE_FOUND)
-        })
-        try {
-            // 1) já pareado?
-            try { f.getPairRecord() } catch (_: Exception) {}
-            waitFor(1500) { foundMac != null }
-            if (foundMac == null) {
-                // 2) procurar e parear
-                try { f.startSearch() } catch (_: Exception) {}
-                waitFor(30000) { foundMac != null }
-                try { f.stopSearch() } catch (_: Exception) {}
-                foundMac?.let { m ->
-                    val dev = BTDevice(m, "OBD").apply { deviceClass = 3; obdPassword = PIN; pairRecordIndex = -1 }
-                    try { f.connectDevice(dev); Thread.sleep(1500) } catch (_: Exception) {}
-                }
-            }
-        } finally {
-            try { app.unregisterReceiver(rec) } catch (_: Exception) {}
-        }
-        return foundMac
-    }
+    // O MAC vem do seletor (NwdScan), que já procurou/pareou e salvou. O transporte só reconecta nele.
+    private fun resolveMac(): String? = ScannerConnector.sppMac(app)
 
     private fun watchDisconnect() {
         val rec = object : BroadcastReceiver() {
@@ -118,7 +76,7 @@ class NwdSppTransport(ctx: Context) : ScannerTransport {
     }
 
     private fun bindBlocking(): IBinder? {
-        val intent = explicit(app) ?: return null
+        val intent = explicitIntent(app) ?: return null
         val latch = CountDownLatch(1)
         var got: IBinder? = null
         val c = object : ServiceConnection {
@@ -147,14 +105,6 @@ class NwdSppTransport(ctx: Context) : ScannerTransport {
         }
     }
 
-    private fun waitFor(ms: Long, cond: () -> Boolean) {
-        val until = System.currentTimeMillis() + ms
-        while (!cond() && System.currentTimeMillis() < until) Thread.sleep(100)
-    }
-
-    private fun isObd(name: String) =
-        name.contains("OBD", true) || name.contains("VHM", true) || name.contains("CAR", true)
-
     companion object {
         private const val TAG = "NwdSpp"
         const val PIN = "1234"
@@ -172,13 +122,109 @@ class NwdSppTransport(ctx: Context) : ScannerTransport {
         const val EXTRA_PAIR = "extra_pair_device"
 
         /** true se a central tem o serviço de Bluetooth do fabricante (ou seja, não é um celular comum). */
-        fun present(ctx: Context): Boolean = explicit(ctx) != null
+        fun present(ctx: Context): Boolean = explicitIntent(ctx) != null
 
-        private fun explicit(ctx: Context): Intent? {
+        internal fun explicitIntent(ctx: Context): Intent? {
             val i = Intent(ACTION_SERVICE)
             val info = ctx.packageManager.queryIntentServices(i, 0)?.firstOrNull()?.serviceInfo ?: return null
             return Intent(i).setComponent(ComponentName(info.packageName, info.name))
         }
+    }
+}
+
+/**
+ * Sessão de descoberta/pareamento pelo Bluetooth da central — para a tela "Conectar scanner"
+ * se comportar como um Bluetooth normal: procura, lista, você escolhe, pede PIN e pareia.
+ * Separada do [NwdSppTransport] (que só abre o canal de dados no MAC já salvo).
+ *
+ * Os métodos que falam com o serviço ([start], [choose], [stop]) podem bloquear (bind/IPC) —
+ * chame fora da thread de UI.
+ */
+class NwdScan(ctx: Context) {
+    /** Um aparelho visto na busca ou já pareado. [src] guarda o registro real quando veio de pareado. */
+    data class Dev(val mac: String, var name: String, var paired: Boolean, var src: BTDevice? = null)
+
+    private val app = ctx.applicationContext
+    private var conn: ServiceConnection? = null
+    private var feat: BtFeature? = null
+    private var receiver: BroadcastReceiver? = null
+    private val found = LinkedHashMap<String, Dev>()   // por MAC, preserva a ordem de chegada
+    @Volatile private var onChange: (() -> Unit)? = null
+
+    /** Liga no serviço e começa a procurar; [onChange] é chamado a cada aparelho novo/atualizado. */
+    fun start(onChange: () -> Unit): Boolean {
+        this.onChange = onChange
+        val binder = bind() ?: return false
+        feat = BtFeature(binder)
+        val rec = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) {
+                when (i?.action) {
+                    NwdSppTransport.ACTION_BT_DEVICE_FOUND ->
+                        add(i.getStringExtra(NwdSppTransport.EXTRA_ADDR), i.getStringExtra(NwdSppTransport.EXTRA_NAME), false, null)
+                    NwdSppTransport.ACTION_PAIR_REC -> {
+                        @Suppress("DEPRECATION") val d = i.getParcelableExtra<BTDevice>(NwdSppTransport.EXTRA_PAIR)
+                        if (d?.address != null) add(d.address, d.name, d.isPair, d)
+                    }
+                    NwdSppTransport.ACTION_CONN_CHANGE -> this@NwdScan.onChange?.invoke()
+                }
+            }
+        }
+        receiver = rec
+        app.registerReceiver(rec, IntentFilter().apply {
+            addAction(NwdSppTransport.ACTION_BT_DEVICE_FOUND)
+            addAction(NwdSppTransport.ACTION_PAIR_REC)
+            addAction(NwdSppTransport.ACTION_CONN_CHANGE)
+        })
+        try { feat?.getPairRecord() } catch (_: Exception) {}   // já pareados
+        try { feat?.startSearch() } catch (_: Exception) {}     // procura novos
+        return true
+    }
+
+    fun devices(): List<Dev> = synchronized(found) { found.values.toList() }
+
+    /** Pareia/conecta o escolhido com o [pin] e salva o MAC pro transporte reconectar. */
+    fun choose(dev: Dev, pin: String): String {
+        try { feat?.setPinCode(pin) } catch (_: Exception) {}
+        val d = dev.src ?: BTDevice(dev.mac, dev.name).apply { deviceClass = 3; pairRecordIndex = -1 }
+        d.obdPassword = pin
+        try { feat?.connectDevice(d) } catch (_: Exception) {}
+        ScannerConnector.saveSppMac(app, dev.mac)
+        return dev.mac
+    }
+
+    fun stop() {
+        try { feat?.stopSearch() } catch (_: Exception) {}
+        receiver?.let { try { app.unregisterReceiver(it) } catch (_: Exception) {} }; receiver = null
+        conn?.let { try { app.unbindService(it) } catch (_: Exception) {} }; conn = null
+        feat = null
+    }
+
+    private fun add(mac: String?, name: String?, paired: Boolean, src: BTDevice?) {
+        if (mac == null) return
+        synchronized(found) {
+            val d = found.getOrPut(mac) { Dev(mac, name ?: mac, paired) }
+            if (!name.isNullOrBlank()) d.name = name
+            if (paired) d.paired = true
+            if (src != null) d.src = src
+        }
+        onChange?.invoke()
+    }
+
+    private fun bind(): IBinder? {
+        val intent = NwdSppTransport.explicitIntent(app) ?: return null
+        val latch = CountDownLatch(1)
+        var got: IBinder? = null
+        val c = object : ServiceConnection {
+            override fun onServiceConnected(n: ComponentName?, s: IBinder?) { got = s; latch.countDown() }
+            override fun onServiceDisconnected(n: ComponentName?) {}
+        }
+        conn = c
+        try {
+            app.startService(intent)
+            if (!app.bindService(intent, c, Context.BIND_AUTO_CREATE)) return null
+        } catch (_: Exception) { return null }
+        latch.await(6, TimeUnit.SECONDS)
+        return got
     }
 }
 
