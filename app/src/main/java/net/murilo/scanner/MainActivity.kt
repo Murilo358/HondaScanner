@@ -873,6 +873,14 @@ class MainActivity : Activity() {
             }
             if (dev.paired) connect("1234") else promptPin(dev.name, connect)
         }
+        // segurar um item = desconectar e esquecer esse aparelho (libera o Bluetooth da central)
+        list.setOnItemLongClickListener { _, _, i, _ ->
+            val dev = shown.getOrNull(i) ?: return@setOnItemLongClickListener true
+            if (ScannerConnector.sppMac(this) == dev.mac) ScannerConnector.clearSppMac(this)
+            toast("Esquecendo ${dev.name}…")
+            Thread { scan.forget(dev.mac); runOnUiThread { toast("Esquecido: ${dev.name}") } }.start()
+            true
+        }
 
         dlg.show()
         Thread {
@@ -884,12 +892,22 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    /** Central: desconecta o scanner e esquece a escolha, pra não reconectar sozinho e liberar o Bluetooth. */
+    /** Central: desconecta o scanner E remove o pareamento, pra não reconectar sozinho e liberar o Bluetooth. */
     private fun forgetNwd() {
+        val mac = ScannerConnector.sppMac(this)
         ScannerConnector.clearSppMac(this)                      // não reconecta mais até escolher de novo
-        client?.stop(); Shared.client = null; client = null     // close() do transporte chama SppDisConnect
+        client?.stop(); Shared.client = null; client = null     // solta a SPP do nosso lado
         view.postInvalidate()
-        toast("Scanner desconectado e esquecido")
+        toast("Desconectando e esquecendo o scanner…")
+        Thread {
+            val scan = NwdScan(this)
+            if (scan.start(search = false) { }) {               // só pega os pareados (sem iniciar busca)
+                Thread.sleep(800)                               // deixa chegar os registros de pareamento
+                scan.forget(mac)                                // disConnectDevice_BC + deletePairDeviceRecord
+            }
+            scan.stop()
+            runOnUiThread { toast("Scanner desconectado e esquecido") }
+        }.start()
     }
 
     private fun promptPin(name: String, onPin: (String) -> Unit) {
