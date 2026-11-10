@@ -1,6 +1,7 @@
 package net.murilo.scanner.installer;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.InstallSourceInfo;
 import android.content.pm.PackageInfo;
@@ -16,27 +17,29 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * Instala o app Scanner pelo instalador do sistema declarando o Google Play como origem.
- * O Android Auto so lista apps da Car App Library cuja instalacao veio da Play; o instalador
- * do sistema (diferente do adb ou de instaladores de terceiros) consegue registrar isso no
- * Android 13 e abaixo. Mesma abordagem do AAAD / KingInstaller / hondash-aa.
+ * Instala o app Scanner declarando o Google Play como origem — o Android Auto so lista apps da
+ * Car App Library cuja instalacao veio da Play.
+ *
+ * Usa a API moderna {@link PackageInstaller.Session}: o intent legado ACTION_INSTALL_PACKAGE +
+ * EXTRA_INSTALLER_PACKAGE_NAME e IGNORADO no Android 12+ (a origem virava "packageinstaller" e o
+ * AA escondia o app). Aqui pedimos setInstallerPackageName(Play) e, no Android 13+,
+ * setPackageSource(PACKAGE_SOURCE_STORE). Observacao: um app comum NAO consegue cravar o nome do
+ * instalador como "com.android.vending" (precisa de permissao de sistema) — por isso a tela mostra
+ * a origem resultante; se nao ficar Play, use tambem "Fontes desconhecidas" no modo dev do AA.
  */
 public final class InstallerActivity extends Activity {
 
     private static final String TARGET = "net.murilo.scanner";
     private static final String PLAY_STORE = "com.android.vending";
     private static final String ASSET = "Scanner.apk";
-    private static final int REQ_INSTALL = 1;
-    private static final int REQ_UNINSTALL = 2;
+    private static final String ACTION_RESULT = "net.murilo.scanner.installer.INSTALL_RESULT";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView status;
@@ -58,17 +61,27 @@ public final class InstallerActivity extends Activity {
         root.addView(title);
 
         status = new TextView(this);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, pad, 0, pad);
         root.addView(status);
 
         button = new Button(this);
-        button.setText("Instalar para Android Auto");
         button.setOnClickListener(v -> start());
         root.addView(button);
 
-        setContentView(root);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(root);
+        setContentView(sv);
+
+        handleResult(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleResult(intent);
     }
 
     @Override
@@ -77,29 +90,53 @@ public final class InstallerActivity extends Activity {
         refreshStatus();
     }
 
+    /** Retorno do PackageInstaller: pede confirmacao do sistema, ou mostra sucesso/falha. */
+    private void handleResult(Intent intent) {
+        if (intent == null || !ACTION_RESULT.equals(intent.getAction())) {
+            return;
+        }
+        int st = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999);
+        if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (confirm != null) {
+                try {
+                    startActivity(confirm);
+                } catch (Exception e) {
+                    button.setEnabled(true);
+                    status.setText("Nao consegui abrir a confirmacao: " + e.getMessage());
+                }
+            }
+        } else if (st == PackageInstaller.STATUS_SUCCESS) {
+            main.post(this::refreshStatus);
+        } else {
+            String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+            button.setEnabled(true);
+            status.setText("A instalacao falhou" + (msg != null ? ": " + msg : "") + "."
+                    + "\n\nSe falou de assinatura, desinstale o \"Scanner\" antigo "
+                    + "(Config. -> Apps -> Scanner -> Desinstalar) e tente de novo.");
+        }
+    }
+
     private void refreshStatus() {
         PackageInfo info = installedInfo();
         if (info == null) {
             status.setText("O Scanner nao esta instalado.");
             button.setText("Instalar para Android Auto");
         } else if (installedViaPlay()) {
-            status.setText("Scanner " + info.versionName + " instalado do jeito certo.\n\n"
-                    + "Se ainda nao aparece no Android Auto, force a parada do Android Auto "
-                    + "(Config. -> Apps -> Android Auto -> Forcar parada) ou reinicie o celular.");
+            status.setText("Scanner " + info.versionName + " instalado com origem Play.\n\n"
+                    + "Origem: " + sourceInfo() + "\n\n"
+                    + "Se ainda nao aparecer no Android Auto, force a parada do Android Auto "
+                    + "(Config. -> Apps -> Android Auto -> Forcar parada) e reconecte.");
             button.setText("Reinstalar / atualizar");
         } else {
-            // Android 12+ ignora o truque de origem Play; a instalacao fica como "packageinstaller".
-            // Nessas versoes quem faz o Android Auto listar o app e a opcao "Fontes desconhecidas".
-            status.setText("Scanner " + info.versionName + " instalado.\n\n"
-                    + "Neste Android a origem Google Play nao pode ser forcada (normal no Android 12+),"
-                    + " entao o Android Auto so lista o app com as FONTES DESCONHECIDAS ligadas:\n\n"
-                    + "1. Abra o Android Auto (Ajustes -> Dispositivos conectados -> Android Auto).\n"
-                    + "2. Role ate \"Versao\" e toque ~10x -> ativa o modo desenvolvedor.\n"
-                    + "3. Menu (3 pontos) -> Config. do desenvolvedor -> ligue \"Fontes desconhecidas\".\n"
-                    + "4. Reconecte ao carro (a lista de apps so aparece na projecao).\n\n"
-                    + "Origem atual: " + sourceInfo());
-            button.setText("Reinstalar / atualizar");
+            status.setText("Scanner " + info.versionName + " instalado, mas a origem NAO ficou como Play.\n\n"
+                    + "Origem atual: " + sourceInfo() + "\n\n"
+                    + "Toque abaixo para reinstalar declarando a Play. Se mesmo assim nao ficar "
+                    + "(limitacao do Android 12+), ligue \"Fontes desconhecidas\" no modo "
+                    + "desenvolvedor do Android Auto.");
+            button.setText("Reinstalar como Play");
         }
+        button.setEnabled(true);
     }
 
     private void start() {
@@ -116,32 +153,52 @@ public final class InstallerActivity extends Activity {
             }
             return;
         }
-        // Android < 12: da pra converter a origem p/ Play reinstalando, entao desinstala antes.
-        // Android 12+: a origem nao pode ser forcada; so reinstala por cima (mantem dados) e o AA
-        //              lista via "Fontes desconhecidas" (ver refreshStatus) — nao desinstala a toa.
-        if (Build.VERSION.SDK_INT < 31 && installedInfo() != null && !installedViaPlay()) {
-            status.setText("Desinstalando a versao antiga — confirme na tela do sistema.");
-            Intent uninstall = new Intent(Intent.ACTION_UNINSTALL_PACKAGE,
-                    Uri.parse("package:" + TARGET));
-            uninstall.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-            try {
-                startActivityForResult(uninstall, REQ_UNINSTALL);
-            } catch (Exception e) {
-                try {
-                    startActivityForResult(new Intent(Intent.ACTION_DELETE,
-                            Uri.parse("package:" + TARGET)), REQ_UNINSTALL);
-                } catch (Exception e2) {
-                    status.setText("Nao consegui abrir a desinstalacao. Desinstale o \"Scanner\" "
-                            + "na mao (Config. -> Apps -> Scanner -> Desinstalar) e toque aqui de novo.");
-                }
-            }
-            return;
-        }
         install();
     }
 
     private boolean open(Intent i) {
         try { startActivity(i); return true; } catch (Exception e) { return false; }
+    }
+
+    private void install() {
+        button.setEnabled(false);
+        status.setText("Instalando…");
+        new Thread(() -> {
+            try {
+                PackageInstaller pi = getPackageManager().getPackageInstaller();
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                        PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                // declara a Play como origem (o que o Android Auto exige)
+                try { params.setInstallerPackageName(PLAY_STORE); } catch (Throwable ignore) {}
+                if (Build.VERSION.SDK_INT >= 33) {
+                    try { params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_STORE); } catch (Throwable ignore) {}
+                }
+                int sid = pi.createSession(params);
+                try (PackageInstaller.Session session = pi.openSession(sid)) {
+                    try (InputStream in = getAssets().open(ASSET);
+                            OutputStream out = session.openWrite("apk", 0, -1)) {
+                        byte[] buf = new byte[64 * 1024];
+                        int n;
+                        while ((n = in.read(buf)) > 0) {
+                            out.write(buf, 0, n);
+                        }
+                        session.fsync(out);
+                    }
+                    Intent cb = new Intent(this, InstallerActivity.class).setAction(ACTION_RESULT);
+                    int flags = PendingIntent.FLAG_UPDATE_CURRENT
+                            | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+                    PendingIntent pending = PendingIntent.getActivity(this, 0, cb, flags);
+                    session.commit(pending.getIntentSender());
+                }
+                main.post(() -> status.setText("Confirme a instalacao na tela do sistema.\n\nSe o "
+                        + "Play Protect avisar, toque em \"Mais detalhes\" -> \"Instalar mesmo assim\"."));
+            } catch (Exception e) {
+                main.post(() -> {
+                    button.setEnabled(true);
+                    status.setText("Erro ao instalar: " + e.getMessage());
+                });
+            }
+        }).start();
     }
 
     private String sourceInfo() {
@@ -151,74 +208,9 @@ public final class InstallerActivity extends Activity {
             }
             InstallSourceInfo s = getPackageManager().getInstallSourceInfo(TARGET);
             return s.getInstallingPackageName()
-                    + (Build.VERSION.SDK_INT >= 33 ? " (src=" + s.getPackageSource() + ")" : "");
+                    + (Build.VERSION.SDK_INT >= 33 ? " (source=" + s.getPackageSource() + ")" : "");
         } catch (Exception e) {
             return "?";
-        }
-    }
-
-    private void install() {
-        button.setEnabled(false);
-        status.setText("Preparando…");
-        new Thread(() -> {
-            try {
-                File apk = extractApk();
-                main.post(() -> launchInstaller(apk));
-            } catch (IOException e) {
-                main.post(() -> {
-                    button.setEnabled(true);
-                    status.setText("Erro ao preparar o APK: " + e.getMessage());
-                });
-            }
-        }).start();
-    }
-
-    private File extractApk() throws IOException {
-        File out = new File(getCacheDir(), ASSET);
-        try (InputStream in = getAssets().open(ASSET);
-                OutputStream os = new FileOutputStream(out)) {
-            byte[] buf = new byte[64 * 1024];
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                os.write(buf, 0, n);
-            }
-        }
-        return out;
-    }
-
-    @SuppressWarnings("deprecation")
-    private void launchInstaller(File apk) {
-        Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-        intent.setDataAndType(ApkProvider.uriFor(apk), ApkProvider.MIME);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, PLAY_STORE);
-        intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
-        intent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-        status.setText("Confirme a instalacao na tela do sistema.\n\nSe aparecer aviso do "
-                + "Play Protect, toque em \"Mais detalhes\" -> \"Instalar mesmo assim\".");
-        try {
-            startActivityForResult(intent, REQ_INSTALL);
-        } catch (Exception e) {
-            button.setEnabled(true);
-            status.setText("Nao consegui abrir o instalador do sistema: " + e.getMessage());
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        button.setEnabled(true);
-        if (requestCode == REQ_UNINSTALL) {
-            if (installedInfo() == null) {
-                install();
-            } else {
-                status.setText("A desinstalacao foi cancelada.");
-            }
-        } else if (requestCode == REQ_INSTALL) {
-            refreshStatus();
-            if (resultCode != RESULT_OK && installedInfo() == null) {
-                status.setText("A instalacao foi cancelada ou falhou.");
-            }
         }
     }
 
@@ -237,12 +229,12 @@ public final class InstallerActivity extends Activity {
                 return PLAY_STORE.equals(pm.getInstallerPackageName(TARGET));
             }
             InstallSourceInfo src = pm.getInstallSourceInfo(TARGET);
-            if (!PLAY_STORE.equals(src.getInstallingPackageName())) {
-                return false;
+            if (PLAY_STORE.equals(src.getInstallingPackageName())) {
+                return true;
             }
-            return Build.VERSION.SDK_INT < 33
-                    || src.getPackageSource() != PackageInstaller.PACKAGE_SOURCE_OTHER;
-        } catch (PackageManager.NameNotFoundException | IllegalArgumentException e) {
+            return Build.VERSION.SDK_INT >= 33
+                    && src.getPackageSource() == PackageInstaller.PACKAGE_SOURCE_STORE;
+        } catch (Exception e) {
             return false;
         }
     }
