@@ -18,37 +18,44 @@ Os APKs prontos ficam em **[Releases](https://github.com/Murilo358/HondaScanner/
 
 ### A) Usar no carro (Android Auto)
 
-Para o app aparecer no Android Auto, **duas coisas** precisam estar certas: o app instalado **e** o
-Android Auto configurado para aceitar apps de fora da Play. É rápido:
+O Android Auto só lista apps cuja instalação foi **registrada como vinda da Google Play**. Como
+conseguir isso **depende da versão do Android** — e mudou bastante:
 
-**Passo 1 — Instalar o app**
-1. Baixe o **`Scanner-vX.apk`** (mais recente) em [Releases](https://github.com/Murilo358/HondaScanner/releases).
-2. No celular, abra **Arquivos → Downloads → `Scanner-vX.apk`** e toque em **Instalar**.
-   - Se pedir, **permita instalar apps desconhecidos** para o app de Arquivos (ou navegador).
-   - Se o **Play Protect** avisar "app nocivo": **Mais detalhes → Instalar mesmo assim**. É trava
-     genérica do Google para app de fora da Play, não é problema do app.
+#### Android ≤ 11 (ex.: a central NWD / Android 10)
+Use o **`Scanner-Instalador-vX.apk`**: ele registra a Play como origem sozinho.
+1. Instale o `Scanner-Instalador-vX.apk` (permita apps desconhecidos; Play Protect → "Instalar mesmo assim").
+2. Abra **"Scanner — Android Auto"** → **Instalar para Android Auto** → confirme.
+3. Reconecte ao carro. Se não aparecer: **Ajustes → Apps → Android Auto → Forçar parada** e reconecte.
 
-**Passo 2 — Ligar "Fontes desconhecidas" no Android Auto** (uma vez só)
+#### Android 12+ (ex.: Moto G77 / Android 16) — KingInstaller + Shizuku
+Do Android 12 em diante, **nenhum app consegue** se declarar como a Play (o sistema bloqueia com
+`SecurityException`), e o Android Auto passou a exigir **dois** carimbos: *requested by =* instalador do
+sistema **e** *installed by =* `com.android.vending`. Só o **Shizuku** (privilégio de shell, sem root) +
+**KingInstaller** montam os dois. ⚠️ **"Fontes desconhecidas" do AA sozinho NÃO basta** nessas versões,
+nem o instalador deste projeto, nem `adb install -i` (esse deixa *requested by = shell* e o AA recusa).
 
-> Por que: o Android Auto esconde apps que não vieram da Play Store. Essa opção manda ele aceitar.
-> **É o passo que todo mundo esquece.**
+1. **Shizuku** (uma vez) — instale o [Shizuku](https://github.com/RikkaApps/Shizuku) e inicie por
+   **pareamento por depuração sem fio** (precisa de Wi‑Fi):
+   Opções do desenvolvedor → **Depuração por Wi‑Fi** (ligar) → **Parear dispositivo com código** →
+   digite o código de 6 dígitos na **notificação do Shizuku** → no Shizuku, **Iniciar** até dizer
+   "Shizuku está em execução". *Depois de reiniciar o celular, abra o Shizuku e toque Iniciar de novo.*
+2. **KingInstaller** — instale ([releases](https://github.com/fcaronte/KingInstaller/releases)), abra e
+   conceda o acesso ao **Shizuku** (Permitir sempre).
+3. Baixe o **`Scanner-vX.apk`** (o app) e, no KingInstaller, **instale-o** — ele já instala "como Play
+   Store" via Shizuku (o botão de instalar do KingInstaller faz isso por padrão). *No PC, `./push-app.sh`
+   compila e joga o APK direto no Downloads do celular pra você.*
+4. Reconecte ao carro → o Scanner aparece. ✅ Confirmado no Moto G77 / Android 16.
 
-1. Abra as configurações do Android Auto: **Ajustes do celular → Dispositivos conectados →
-   Preferências de conexão → Android Auto** (ou busque **"Android Auto"** nos Ajustes — ele não tem
-   ícone na gaveta de apps).
-2. Role até o fim, em **"Versão e informações de permissão"**, e **toque ~10 vezes** até aparecer
-   "modo desenvolvedor ativado".
-3. Toque no menu **⋮** (canto superior direito) → **Configurações do desenvolvedor**.
-4. Ligue **"Fontes desconhecidas"** (*Unknown sources*).
+> **Atualizar** no Android 12+: refaça o passo 3 (KingInstaller) a cada versão. O Shizuku precisa estar
+> rodando (reinicie-o após reiniciar o aparelho).
+>
+> **Com root** dá pra acabar com essa dança: o módulo Xposed do
+> [Android‑Auto‑XLauncher‑Unlocked](https://github.com/Rikj000/Android-Auto-XLauncher-Unlocked) faz o AA
+> **ignorar a checagem de origem** — aí qualquer instalação (até `adb install`) é aceita, sem
+> KingInstaller a cada update. Precisa de **root + LSPosed**.
 
-**Passo 3 — Conectar no carro**
-
-Conecte o celular na multimídia como você já faz (cabo ou sem fio). O **Scanner** aparece na grade de
-apps do Android Auto. Abra e pronto.
-
-- Não apareceu de primeira? **Ajustes → Apps → Android Auto → Forçar parada** e reconecte.
-- A lista de apps do AA **só existe durante a projeção** (conectado no carro). Não adianta procurar
-  uma "lista do Android Auto" na tela do celular — ela não existe mais.
+A lista de apps do AA **só existe durante a projeção** (conectado no carro); não há "lista do Android
+Auto" na tela do celular.
 
 ### B) Só testar as telas no celular (sem carro)
 
@@ -58,17 +65,12 @@ Bluetooth. Não precisa de nada do Android Auto.
 
 ### Atualizar para uma versão nova
 
-Baixe o `Scanner-vX.apk` novo e instale por cima — **mantém seus dados**. (Se der erro de assinatura,
-é porque a versão nova foi assinada com outra chave; aí desinstale a antiga e instale a nova.)
+- **Só no celular (sem AA):** baixe o `Scanner-vX.apk` novo e instale por cima (mantém os dados).
+- **Usando no carro, Android ≤ 11:** reinstale pelo `Scanner-Instalador-vX.apk`.
+- **Usando no carro, Android 12+:** reinstale pelo **KingInstaller** (passo 3 acima) com o Shizuku ligado.
 
-### Instalador alternativo (`Scanner-Instalador.apk`)
-
-É um app com um botão "Instalar para Android Auto" que **já traz o Scanner embutido** — útil se você
-não quer baixar o APK do app à parte, ou em **Android 10/11**, onde ele consegue registrar a Google
-Play como origem (e aí nem precisa das "Fontes desconhecidas"). **No Android 12+ ele não consegue mais
-forjar a origem Play** — então nessas versões o caminho continua sendo o **Passo 2** acima (Fontes
-desconhecidas). Use: instale o `Scanner-Instalador.apk`, abra **"Scanner — Android Auto"** e siga as
-instruções na tela.
+> Se der erro de assinatura ao atualizar, é porque o build novo foi assinado com outra chave (cada build
+> do CI gera uma); aí desinstale a versão antiga e instale a nova.
 
 ---
 
@@ -156,7 +158,8 @@ AplicativoScanner/
 │     ├─ res/                drawables, xml (automotive_app_desc = "template")
 │     └─ java/net/murilo/scanner/   todo o código Kotlin
 ├─ installer/               módulo do instalador p/ Android Auto (embute app/.../Scanner.apk)
-├─ build-installer.sh       atalho p/ gerar o instalador com o app atual
+├─ build-installer.sh       atalho p/ gerar o instalador com o app atual (Android ≤ 11)
+├─ push-app.sh             compila e joga o APK no Downloads do celular (p/ KingInstaller, Android 12+)
 ├─ run-dhu.sh               Desktop Head Unit (teste do Android Auto no PC)
 ├─ .github/workflows/       CI: gera os APKs e publica no Releases ao enviar uma tag vX
 ├─ build.gradle, settings.gradle, gradle/, gradlew
