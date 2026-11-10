@@ -241,7 +241,9 @@ public final class InstallerActivity extends Activity {
                 PackageInstaller pi = getPackageManager().getPackageInstaller();
                 PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                         PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-                try { params.setInstallerPackageName(PLAY_STORE); } catch (Throwable ignore) {}
+                // NAO dá pra fingir ser a Play: o sistema rejeita com SecurityException
+                // ("com.android.vending does not belong to <uid>"). O máximo possível é declarar
+                // que veio de uma loja (source=STORE) — isso um app comum pode.
                 if (Build.VERSION.SDK_INT >= 33) {
                     try { params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_STORE); } catch (Throwable ignore) {}
                 }
