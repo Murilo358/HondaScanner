@@ -88,10 +88,17 @@ public final class InstallerActivity extends Activity {
                     + "(Config. -> Apps -> Android Auto -> Forcar parada) ou reinicie o celular.");
             button.setText("Reinstalar / atualizar");
         } else {
-            status.setText("O Scanner esta instalado de um jeito que o Android Auto nao aceita."
-                    + "\n\nOrigem atual: " + sourceInfo()
-                    + "\n\nAo tocar abaixo ele sera desinstalado e instalado de novo pela Play como origem.");
-            button.setText("Corrigir instalacao");
+            // Android 12+ ignora o truque de origem Play; a instalacao fica como "packageinstaller".
+            // Nessas versoes quem faz o Android Auto listar o app e a opcao "Fontes desconhecidas".
+            status.setText("Scanner " + info.versionName + " instalado.\n\n"
+                    + "Neste Android a origem Google Play nao pode ser forcada (normal no Android 12+),"
+                    + " entao o Android Auto so lista o app com as FONTES DESCONHECIDAS ligadas:\n\n"
+                    + "1. Abra o Android Auto (Ajustes -> Dispositivos conectados -> Android Auto).\n"
+                    + "2. Role ate \"Versao\" e toque ~10x -> ativa o modo desenvolvedor.\n"
+                    + "3. Menu (3 pontos) -> Config. do desenvolvedor -> ligue \"Fontes desconhecidas\".\n"
+                    + "4. Reconecte ao carro (a lista de apps so aparece na projecao).\n\n"
+                    + "Origem atual: " + sourceInfo());
+            button.setText("Reinstalar / atualizar");
         }
     }
 
@@ -109,7 +116,10 @@ public final class InstallerActivity extends Activity {
             }
             return;
         }
-        if (installedInfo() != null && !installedViaPlay()) {
+        // Android < 12: da pra converter a origem p/ Play reinstalando, entao desinstala antes.
+        // Android 12+: a origem nao pode ser forcada; so reinstala por cima (mantem dados) e o AA
+        //              lista via "Fontes desconhecidas" (ver refreshStatus) — nao desinstala a toa.
+        if (Build.VERSION.SDK_INT < 31 && installedInfo() != null && !installedViaPlay()) {
             status.setText("Desinstalando a versao antiga — confirme na tela do sistema.");
             Intent uninstall = new Intent(Intent.ACTION_UNINSTALL_PACKAGE,
                     Uri.parse("package:" + TARGET));

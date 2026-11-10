@@ -78,6 +78,27 @@ embute o APK do app e o instala pelo instalador do sistema **declarando a Play c
 > **Por que esse rodeio:** `adb install` marca origem = adb, e o AA recusa. O instalador registra a
 > Play como origem (único jeito que a multimídia aceita). Confirmado no Redmi (HyperOS, Android 13).
 
+### Android 12+ (ex.: Moto G77/Android 16) — se o app não aparece no Android Auto
+O truque de "origem Play" do instalador **parou de funcionar no Android 12+**: o sistema ignora o
+`EXTRA_INSTALLER_PACKAGE_NAME`, a instalação fica com origem `com.google.android.packageinstaller` e o
+Android Auto esconde o app. Nessas versões o que funciona é **ligar "Fontes desconhecidas"** no modo
+desenvolvedor do próprio Android Auto:
+
+1. Abra o Android Auto: **Ajustes → Dispositivos conectados → Preferências de conexão → Android Auto**
+   (ou busque "Android Auto" nos Ajustes — ele não tem ícone no menu de apps).
+2. Role até **"Versão e informações de permissão"** e toque **~10×** → ativa o modo desenvolvedor.
+3. Menu **⋮ → Configurações do desenvolvedor** → ligue **"Fontes desconhecidas"**.
+4. **Reconecte ao carro.** A lista de apps do AA **só existe durante a projeção** (não há mais lista na
+   tela do celular) — por isso o app parece "sumido" se você olhar sem estar conectado.
+
+Com "Fontes desconhecidas" ligado, a **origem da instalação deixa de importar** (pode instalar pelo
+instalador ou por `adb install`). Para forçar a origem Play mesmo assim (opcional, via PC):
+`adb install -i com.android.vending -r <apk>`.
+
+**Testar sem o carro:** `./run-dhu.sh` abre o emulador (Desktop Head Unit). Com o modo desenvolvedor do
+AA ligado e **⋮ → "Iniciar servidor da unidade principal"**, a grade de apps do AA aparece aqui no PC
+(foi assim que confirmamos o Scanner entrando: log `GH.AppNotifier: Posting notification for new app`).
+
 ### Atualizar o app depois (sem perder dados)
 Com a origem já como Play, o botão vira **"Reinstalar/atualizar"** (instala por cima, **mantém os
 dados**). Só volta a pedir "Corrigir" se a origem sair da Play. Para backup/restore manual dos dados
@@ -175,8 +196,10 @@ AplicativoScanner/
 ## Gotchas (coisas que já morderam)
 
 - **JDK 17, nunca 22** — com Java 22 o build quebra.
-- **Android Auto = origem Play.** Só pelo instalador (ou modo desenvolvedor do AA, que falhou nessa
-  multimídia). `adb install` não serve pro carro, só pra testar no celular.
+- **Android Auto = origem Play (Android ≤ 11) OU "Fontes desconhecidas" do AA (Android 12+).** O truque
+  de origem Play do instalador só cola até o Android 11; no Android 12+ (Moto G77/Android 16, etc.)
+  ligue "Fontes desconhecidas" no modo desenvolvedor do Android Auto (ver seção acima). A lista de apps
+  do AA só aparece durante a projeção (carro ou DHU), nunca na tela do celular.
 - **Play Protect / Xiaomi** podem bloquear a instalação ("app nocivo") de forma inconsistente —
   desligar na hora de instalar.
 - `app/src/main/res/xml/automotive_app_desc.xml` **tem que ser** `<uses name="template"/>` (não
