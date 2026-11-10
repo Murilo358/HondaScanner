@@ -1,108 +1,120 @@
-# AplicativoScanner
+# Scanner — painel Honda OBD‑1
 
-App Android (Kotlin) que conversa com um **scanner OBD‑1 Honda por Bluetooth** e mostra um painel
-de instrumentos ao vivo — no **celular** e no **Android Auto** da multimídia.
-
-- Pacote: `net.murilo.scanner`
-- Comunicação: Bluetooth SPP/RFCOMM. Leitura `20 05 <addr> <len> <ck>`, resposta `00 <L> <dados> <ck>`; limpar DTC `21 04 01 <ck>`.
-- Conecta pelo Bluetooth normal (celular) **ou** pelo Bluetooth da própria multimídia (central NWD),
-  escolhido automaticamente. Reconexão automática com indicador na tela principal. Veja abaixo.
-- Sem conta, sem nuvem, sem chave de API. Dados ficam só no aparelho.
+App Android (Kotlin) que liga num **scanner OBD‑1 Honda por Bluetooth** e mostra um painel de
+instrumentos ao vivo — no **celular** e no **Android Auto** da multimídia. Sem conta, sem nuvem, sem
+chave de API: os dados ficam só no aparelho.
 
 ---
 
-## Requisitos
+## 📲 Como instalar
 
-- **JDK 17** (obrigatório — **não** use Java 22). Neste PC: `/usr/lib/jvm/java-17-openjdk-amd64`.
-- **Android SDK** (compileSdk 35, build-tools). Caminho em `local.properties` (`sdk.dir=...`).
-- `adb` no PATH (platform-tools) para instalar/depurar.
-- Gradle vem pelo wrapper (`./gradlew`) — não precisa instalar.
+Você tem dois jeitos: **usar no carro (Android Auto)** ou **só testar as telas no celular**.
+Os APKs prontos ficam em **[Releases](https://github.com/Murilo358/HondaScanner/releases)** do repositório:
 
-SDK alvo: `minSdk 23`, `targetSdk 34`, `compileSdk 35`. Java/Kotlin 17.
+| Arquivo | O que é |
+|---|---|
+| `Scanner-vX.apk` | o app em si |
+| `Scanner-Instalador-vX.apk` | um instalador que já traz o app embutido (atalho; ver o fim da seção) |
+
+### A) Usar no carro (Android Auto)
+
+Para o app aparecer no Android Auto, **duas coisas** precisam estar certas: o app instalado **e** o
+Android Auto configurado para aceitar apps de fora da Play. É rápido:
+
+**Passo 1 — Instalar o app**
+1. Baixe o **`Scanner-vX.apk`** (mais recente) em [Releases](https://github.com/Murilo358/HondaScanner/releases).
+2. No celular, abra **Arquivos → Downloads → `Scanner-vX.apk`** e toque em **Instalar**.
+   - Se pedir, **permita instalar apps desconhecidos** para o app de Arquivos (ou navegador).
+   - Se o **Play Protect** avisar "app nocivo": **Mais detalhes → Instalar mesmo assim**. É trava
+     genérica do Google para app de fora da Play, não é problema do app.
+
+**Passo 2 — Ligar "Fontes desconhecidas" no Android Auto** (uma vez só)
+
+> Por que: o Android Auto esconde apps que não vieram da Play Store. Essa opção manda ele aceitar.
+> **É o passo que todo mundo esquece.**
+
+1. Abra as configurações do Android Auto: **Ajustes do celular → Dispositivos conectados →
+   Preferências de conexão → Android Auto** (ou busque **"Android Auto"** nos Ajustes — ele não tem
+   ícone na gaveta de apps).
+2. Role até o fim, em **"Versão e informações de permissão"**, e **toque ~10 vezes** até aparecer
+   "modo desenvolvedor ativado".
+3. Toque no menu **⋮** (canto superior direito) → **Configurações do desenvolvedor**.
+4. Ligue **"Fontes desconhecidas"** (*Unknown sources*).
+
+**Passo 3 — Conectar no carro**
+
+Conecte o celular na multimídia como você já faz (cabo ou sem fio). O **Scanner** aparece na grade de
+apps do Android Auto. Abra e pronto.
+
+- Não apareceu de primeira? **Ajustes → Apps → Android Auto → Forçar parada** e reconecte.
+- A lista de apps do AA **só existe durante a projeção** (conectado no carro). Não adianta procurar
+  uma "lista do Android Auto" na tela do celular — ela não existe mais.
+
+### B) Só testar as telas no celular (sem carro)
+
+Instale o `Scanner-vX.apk` igual ao Passo 1 acima e **abra o app "Scanner"** direto. Ele funciona
+sozinho: dá pra ver todas as telas, usar **"Simular dados"** (no menu) ou conectar no scanner por
+Bluetooth. Não precisa de nada do Android Auto.
+
+### Atualizar para uma versão nova
+
+Baixe o `Scanner-vX.apk` novo e instale por cima — **mantém seus dados**. (Se der erro de assinatura,
+é porque a versão nova foi assinada com outra chave; aí desinstale a antiga e instale a nova.)
+
+### Instalador alternativo (`Scanner-Instalador.apk`)
+
+É um app com um botão "Instalar para Android Auto" que **já traz o Scanner embutido** — útil se você
+não quer baixar o APK do app à parte, ou em **Android 10/11**, onde ele consegue registrar a Google
+Play como origem (e aí nem precisa das "Fontes desconhecidas"). **No Android 12+ ele não consegue mais
+forjar a origem Play** — então nessas versões o caminho continua sendo o **Passo 2** acima (Fontes
+desconhecidas). Use: instale o `Scanner-Instalador.apk`, abra **"Scanner — Android Auto"** e siga as
+instruções na tela.
 
 ---
 
-## Como compilar
+## 🔌 Conexão com o scanner
 
-Sempre apontando o JDK 17:
+O app acha o transporte certo sozinho (**mesmo APK no celular e na central**):
+
+- **Celular / tablet:** Bluetooth normal (RFCOMM/SPP) — pareie o scanner no Bluetooth do Android antes.
+- **Central NWD (multimídia):** usa o Bluetooth do fabricante — ver [Bluetooth da central](#bluetooth-da-central-multimídia-nwd).
+
+**Reconexão automática** vem ligada: a tela principal mostra no topo a contagem até a próxima tentativa
+e vira "Conectando…" enquanto tenta; toque no indicador para tentar na hora. Para ligar/desligar:
+**Menu → Painel → Conexão automática**. O scanner costuma se chamar **OBD** e usar **PIN 1234**.
+
+---
+
+## 🛠️ Compilar do código (desenvolvedor)
+
+**Requisitos:** **JDK 17** (obrigatório, não use versão mais nova), Android SDK (`compileSdk 35`), e
+`adb` no PATH. O Gradle vem pelo wrapper (`./gradlew`). O caminho do SDK fica em `local.properties`
+(`sdk.dir=...`, não versionado). SDK alvo: `minSdk 23`, `targetSdk 34`.
 
 ```bash
 cd ~/Desktop/AplicativoScanner
+
+# o app (gera app/build/outputs/apk/debug/app-debug.apk)
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew assembleDebug
-```
 
-Saída: `app/build/outputs/apk/debug/app-debug.apk`
+# o instalador com o app embutido (faz tudo: compila, embute, gera o installer-debug.apk)
+./build-installer.sh
 
-Outros:
-```bash
 # limpar
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew clean
-# só o instalador
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :installer:assembleDebug
 ```
 
----
-
-## Como instalar
-
-### a) No celular, só pra testar a interface
+**Release no GitHub:** empurrar uma tag `vX` dispara o workflow (`.github/workflows/release.yml`), que
+compila e publica os dois APKs em Releases:
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+git push origin main && git tag v0.30 && git push origin v0.30
 ```
-Funciona pra ver as telas na mão. **Mas o Android Auto não aceita** um app instalado assim
-(a origem fica "adb"). Para o AA, use o instalador (abaixo).
 
-### b) Para o Android Auto (multimídia) — via instalador
-O Android Auto só lista apps cuja **origem de instalação é a Google Play**. O módulo `installer`
-embute o APK do app e o instala pelo instalador do sistema **declarando a Play como origem**.
+**Testar o Android Auto no PC (sem carro):** `./run-dhu.sh` abre o Desktop Head Unit (emulador do AA).
+Precisa do modo desenvolvedor do AA ligado e, no celular, **⋮ → "Iniciar servidor da unidade
+principal"**. Útil pra ver a grade de apps do AA e ler o log (`adb logcat | grep GH.`).
 
-1. Gere o instalador com o app novo embutido:
-   ```bash
-   ./build-installer.sh            # faz tudo: compila app, embute, compila installer, (push se conectado)
-   ```
-   ou manualmente:
-   ```bash
-   cp app/build/outputs/apk/debug/app-debug.apk installer/src/main/assets/Scanner.apk
-   JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :installer:assembleDebug
-   adb push installer/build/outputs/apk/debug/installer-debug.apk /sdcard/Download/Scanner-Instalador.apk
-   ```
-2. No celular: **Arquivos → Downloads → Scanner-Instalador.apk** → instale (permita instalar apps
-   desconhecidos para o app de Arquivos).
-3. Abra **"Scanner — Android Auto"** → **Instalar / Corrigir instalação** → confirme.
-   - Se o **Play Protect / Xiaomi** bloquear ("app nocivo"): toque em **Mais detalhes → Instalar
-     mesmo assim**, ou desligue o Play Protect só nessa hora (Play Store → Play Protect → desligar
-     "Verificar apps"). É trava do Google/Xiaomi, não do app.
-4. Confira na tela do instalador a linha **"Origem atual"**: tem que ficar `com.android.vending`.
-5. Se não aparecer no carro: Config. → Apps → Android Auto → Forçar parada, reconecte.
-
-> **Por que esse rodeio:** `adb install` marca origem = adb, e o AA recusa. O instalador registra a
-> Play como origem (único jeito que a multimídia aceita). Confirmado no Redmi (HyperOS, Android 13).
-
-### Android 12+ (ex.: Moto G77/Android 16) — se o app não aparece no Android Auto
-O truque de "origem Play" do instalador **parou de funcionar no Android 12+**: o sistema ignora o
-`EXTRA_INSTALLER_PACKAGE_NAME`, a instalação fica com origem `com.google.android.packageinstaller` e o
-Android Auto esconde o app. Nessas versões o que funciona é **ligar "Fontes desconhecidas"** no modo
-desenvolvedor do próprio Android Auto:
-
-1. Abra o Android Auto: **Ajustes → Dispositivos conectados → Preferências de conexão → Android Auto**
-   (ou busque "Android Auto" nos Ajustes — ele não tem ícone no menu de apps).
-2. Role até **"Versão e informações de permissão"** e toque **~10×** → ativa o modo desenvolvedor.
-3. Menu **⋮ → Configurações do desenvolvedor** → ligue **"Fontes desconhecidas"**.
-4. **Reconecte ao carro.** A lista de apps do AA **só existe durante a projeção** (não há mais lista na
-   tela do celular) — por isso o app parece "sumido" se você olhar sem estar conectado.
-
-Com "Fontes desconhecidas" ligado, a **origem da instalação deixa de importar** (pode instalar pelo
-instalador ou por `adb install`). Para forçar a origem Play mesmo assim (opcional, via PC):
-`adb install -i com.android.vending -r <apk>`.
-
-**Testar sem o carro:** `./run-dhu.sh` abre o emulador (Desktop Head Unit). Com o modo desenvolvedor do
-AA ligado e **⋮ → "Iniciar servidor da unidade principal"**, a grade de apps do AA aparece aqui no PC
-(foi assim que confirmamos o Scanner entrando: log `GH.AppNotifier: Posting notification for new app`).
-
-### Atualizar o app depois (sem perder dados)
-Com a origem já como Play, o botão vira **"Reinstalar/atualizar"** (instala por cima, **mantém os
-dados**). Só volta a pedir "Corrigir" se a origem sair da Play. Para backup/restore manual dos dados
-(app é debug, então `run-as` funciona):
+**Backup/restore dos dados** (app é debug, então `run-as` funciona):
 ```bash
 # backup
 adb exec-out run-as net.murilo.scanner tar c -C /data/data/net.murilo.scanner shared_prefs files > bkp.tar
@@ -110,9 +122,6 @@ adb exec-out run-as net.murilo.scanner tar c -C /data/data/net.murilo.scanner sh
 adb shell am force-stop net.murilo.scanner
 adb shell "run-as net.murilo.scanner tar x -C /data/data/net.murilo.scanner" < bkp.tar
 ```
-
-### Android Auto no PC (sem o carro)
-`./run-dhu.sh` sobe o Desktop Head Unit (emulador do AA) pra testar as telas do carro.
 
 ---
 
@@ -129,10 +138,6 @@ O Scanner detecta isso em tempo de execução e escolhe o transporte sozinho (**
 - **Central NWD:** fala com o serviço do fabricante (`com.bt.ACTION_START_SERVICE` → binder
   `com.bt.BTFeature`, SPP cru) — `NwdSppTransport` (`NwdSpp.kt`). O app nem pede permissão de BT
   (o serviço da central faz o trabalho). O scanner precisa se chamar OBD/VHM/CAR e usar PIN `1234`.
-
-**Reconexão automática** vem **ligada**: a tela principal mostra no topo a contagem até a próxima
-tentativa ("Tentando conectar ao scanner em Ns") e vira "Conectando…" enquanto tenta; toque para
-tentar na hora. Liga/desliga em **Menu → Painel → Conexão automática**.
 
 > Status: o caminho da central foi reconstruído por engenharia reversa do firmware oficial e
 > **ainda precisa ser validado no hardware** (no celular o app cai no Bluetooth normal). Os códigos
@@ -153,6 +158,7 @@ AplicativoScanner/
 ├─ installer/               módulo do instalador p/ Android Auto (embute app/.../Scanner.apk)
 ├─ build-installer.sh       atalho p/ gerar o instalador com o app atual
 ├─ run-dhu.sh               Desktop Head Unit (teste do Android Auto no PC)
+├─ .github/workflows/       CI: gera os APKs e publica no Releases ao enviar uma tag vX
 ├─ build.gradle, settings.gradle, gradle/, gradlew
 └─ local.properties         caminho do SDK (não versionar)
 ```
@@ -191,19 +197,22 @@ AplicativoScanner/
 - `assets/Scanner.apk` — **cópia do app-debug.apk** (reembutida a cada atualização).
 - `AndroidManifest.xml` — `REQUEST_INSTALL_PACKAGES` + `REQUEST_DELETE_PACKAGES`.
 
+### Protocolo OBD‑1 (resumo)
+Bluetooth SPP/RFCOMM. Leitura `20 05 <addr> <len> <ck>`, resposta `00 <L> <dados> <ck>`;
+limpar DTC `21 04 01 <ck>`.
+
 ---
 
 ## Gotchas (coisas que já morderam)
 
-- **JDK 17, nunca 22** — com Java 22 o build quebra.
-- **Android Auto = origem Play (Android ≤ 11) OU "Fontes desconhecidas" do AA (Android 12+).** O truque
-  de origem Play do instalador só cola até o Android 11; no Android 12+ (Moto G77/Android 16, etc.)
-  ligue "Fontes desconhecidas" no modo desenvolvedor do Android Auto (ver seção acima). A lista de apps
-  do AA só aparece durante a projeção (carro ou DHU), nunca na tela do celular.
+- **JDK 17, nunca mais novo** — com Java 22 o build quebra.
+- **Android Auto = "Fontes desconhecidas" (Android 12+) ou origem Play (Android ≤ 11).** No Android 12+
+  (Moto G77/Android 16, etc.) o truque de origem Play do instalador não funciona mais; ligue "Fontes
+  desconhecidas" no modo desenvolvedor do Android Auto (ver "Como instalar → Passo 2"). A lista de apps
+  do AA só aparece durante a projeção, nunca na tela do celular.
 - **Play Protect / Xiaomi** podem bloquear a instalação ("app nocivo") de forma inconsistente —
   desligar na hora de instalar.
 - `app/src/main/res/xml/automotive_app_desc.xml` **tem que ser** `<uses name="template"/>` (não
-  "navigation"), senão o AA não lista mesmo com origem Play.
-- Radares: a base nacional já vem embutida (`assets/radares_brasil.csv`); "Atualizar" rebaixa do
+  "navigation"), senão o AA não lista o app.
+- Radares: a base nacional já vem embutida (`assets/radares_brasil.csv`); "Atualizar" baixa do
   GitHub (projeto Pardal). Precisa de INTERNET só pra atualizar e pros tiles do mapa.
-```
