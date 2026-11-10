@@ -20,11 +20,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -145,11 +147,15 @@ class MainActivity : Activity() {
         countdown = RETRY_SECS
     }
 
-    /** Toque no indicador: tenta conectar na hora. */
+    /** Toque no indicador: tenta conectar na hora (ou abre o seletor, na central sem scanner escolhido). */
     private fun attemptNow() {
         if (sim?.running == true || view.dash.connected) return
+        if (needsNwdPick()) { showNwdPicker(); return }
         startAutoConnect()
     }
+
+    /** Na central NWD, sem scanner escolhido ainda: precisa abrir o seletor (não dá pra auto-conectar). */
+    private fun needsNwdPick() = NwdSppTransport.present(this) && ScannerConnector.sppMac(this) == null
 
     private fun updateConnChip() {
         if (sim?.running == true || view.dash.connected) {
@@ -162,6 +168,10 @@ class MainActivity : Activity() {
         if (Shared.client?.isRunning == true) {               // já está tentando/conectando
             statusChip.text = view.dash.statusMsg.ifBlank { "Conectando…" }
             statusChip.visibility = View.VISIBLE; countdown = RETRY_SECS; return
+        }
+        if (needsNwdPick()) {                                  // central sem scanner escolhido
+            statusChip.text = "Toque para escolher o scanner (Bluetooth da central)"
+            statusChip.visibility = View.VISIBLE; return
         }
         countdown -= 1                                        // ocioso: conta até a próxima tentativa
         if (countdown <= 0) startAutoConnect()
@@ -802,10 +812,8 @@ class MainActivity : Activity() {
     @SuppressLint("MissingPermission")
     private fun pickAndConnect() {
         sim?.stop()
-        // na central NWD o Bluetooth é do fabricante (não aparece no pareamento do Android) -> conecta direto
-        if (NwdSppTransport.present(this)) {
-            startWith(NwdSppTransport(this)); toast("Conectando pelo Bluetooth da central…"); return
-        }
+        // na central NWD o Bluetooth é do fabricante (não aparece no pareamento do Android) -> seletor próprio
+        if (NwdSppTransport.present(this)) { showNwdPicker(); return }
         if (needPerm()) return
         val adapter: BluetoothAdapter? = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (adapter == null || !adapter.isEnabled) { toast("Ligue o Bluetooth"); return }
@@ -826,6 +834,61 @@ class MainActivity : Activity() {
         Shared.client = client
         if (recording) startLog()
         client!!.start()
+    }
+
+    /** Seletor de Bluetooth da central: procura, lista, você escolhe e (se preciso) digita o PIN. */
+    private fun showNwdPicker() {
+        val scan = NwdScan(this)
+        val shown = ArrayList<NwdScan.Dev>()
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, ArrayList())
+        val empty = TextView(this).apply {
+            text = "Procurando dispositivos…\n(deixe o scanner ligado e por perto)"
+            gravity = Gravity.CENTER; setPadding(dp(24), dp(32), dp(24), dp(32))
+        }
+        val list = ListView(this).apply { this.adapter = adapter; emptyView = empty }
+        val container = FrameLayout(this).apply { addView(empty); addView(list) }
+
+        fun refresh() {
+            shown.clear(); shown.addAll(scan.devices())
+            adapter.clear()
+            adapter.addAll(shown.map { (if (it.paired) "✓ " else "") + it.name + "\n" + it.mac })
+            adapter.notifyDataSetChanged()
+        }
+
+        val dlg = AlertDialog.Builder(this)
+            .setTitle("Bluetooth da central — procurando…")
+            .setView(container)
+            .setNegativeButton("Fechar", null)
+            .create()
+        dlg.setOnDismissListener { Thread { scan.stop() }.start() }
+
+        list.setOnItemClickListener { _, _, i, _ ->
+            val dev = shown.getOrNull(i) ?: return@setOnItemClickListener
+            val connect = { pin: String ->
+                toast(if (dev.paired) "Conectando em ${dev.name}…" else "Pareando ${dev.name}…")
+                Thread { scan.choose(dev, pin); runOnUiThread { dlg.dismiss(); startWith(NwdSppTransport(this)) } }.start()
+            }
+            if (dev.paired) connect("1234") else promptPin(dev.name, connect)
+        }
+
+        dlg.show()
+        Thread {
+            val ok = scan.start { runOnUiThread { refresh() } }
+            runOnUiThread {
+                if (!ok) { toast("Não consegui falar com o Bluetooth da central"); dlg.dismiss() }
+                else { dlg.setTitle("Bluetooth da central"); refresh() }
+            }
+        }.start()
+    }
+
+    private fun promptPin(name: String, onPin: (String) -> Unit) {
+        val input = EditText(this).apply { setText("1234"); setSelection(text.length) }
+        AlertDialog.Builder(this)
+            .setTitle("PIN de $name")
+            .setView(input)
+            .setPositiveButton("Parear") { _, _ -> onPin(input.text.toString().ifBlank { "1234" }) }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun toggleRecord() {
