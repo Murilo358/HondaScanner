@@ -284,7 +284,7 @@ class MainActivity : Activity() {
     private fun buildCatList(parent: LinearLayout, cat: Int, mut: Int) {
         data class Dest(val label: String, val count: String?, val go: () -> Unit)
         val items = when (cat) {
-            0 -> listOf(
+            0 -> listOfNotNull(
                 Dest("Personalizar", null) { hideMenu(); showCustomizer() },
                 Dest(if (sim?.running == true) "Parar simulação" else "Simular dados", null) { hideMenu(); toggleSim() },
                 Dest("Reiniciar marcha", null) { hideMenu(); GearDetector.reset(); toast("Marcha reiniciada") },
@@ -294,7 +294,10 @@ class MainActivity : Activity() {
                     ScannerConnector.setAutoConnect(this, on)
                     if (!on && !view.dash.connected) { client?.stop(); Shared.client = null; client = null }
                     reopenMenu()
-                }
+                },
+                // central: desconectar e esquecer o scanner (libera o Bluetooth da central p/ o celular)
+                if (NwdSppTransport.present(this) && ScannerConnector.sppMac(this) != null)
+                    Dest("Desconectar scanner", "esquecer") { hideMenu(); forgetNwd() } else null
             )
             // navegação NÃO fecha o menu: ao voltar da tela, o menu continua onde estava
             1 -> listOf(
@@ -879,6 +882,14 @@ class MainActivity : Activity() {
                 else { dlg.setTitle("Bluetooth da central"); refresh() }
             }
         }.start()
+    }
+
+    /** Central: desconecta o scanner e esquece a escolha, pra não reconectar sozinho e liberar o Bluetooth. */
+    private fun forgetNwd() {
+        ScannerConnector.clearSppMac(this)                      // não reconecta mais até escolher de novo
+        client?.stop(); Shared.client = null; client = null     // close() do transporte chama SppDisConnect
+        view.postInvalidate()
+        toast("Scanner desconectado e esquecido")
     }
 
     private fun promptPin(name: String, onPin: (String) -> Unit) {

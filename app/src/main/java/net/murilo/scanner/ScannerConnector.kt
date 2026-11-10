@@ -34,6 +34,11 @@ object ScannerConnector {
     fun sppMac(ctx: Context): String? =
         try { prefs(ctx).getString(KEY_SPP, null) } catch (_: Exception) { null }
 
+    /** Esquece o scanner da central (para não reconectar sozinho até escolher de novo). */
+    fun clearSppMac(ctx: Context) {
+        try { prefs(ctx).edit().remove(KEY_SPP).apply() } catch (_: Exception) {}
+    }
+
     /** Conectar automaticamente ao abrir / ficar tentando. Vem LIGADO por padrão. */
     fun isAutoConnect(ctx: Context): Boolean =
         try { prefs(ctx).getBoolean(KEY_AUTO, true) } catch (_: Exception) { true }
