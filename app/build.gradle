@@ -9,9 +9,23 @@ android {
         applicationId 'net.murilo.scanner'
         minSdk 23
         targetSdk 34
-        versionCode 30
-        versionName '0.30'
+        versionCode 36
+        versionName '0.36'
         vectorDrawables { useSupportLibrary true }
+    }
+    // keystore fixa do projeto (se presente): builds locais e do CI saem com a MESMA assinatura,
+    // senão o aparelho recusa atualizar (cada máquina gera um debug.keystore diferente).
+    // No CI ela vem do secret DEBUG_KEYSTORE (ver release.yml).
+    signingConfigs {
+        debug {
+            def ks = rootProject.file('debug.keystore')
+            if (ks.exists()) {
+                storeFile ks
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

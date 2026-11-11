@@ -22,6 +22,8 @@
         <intent>
             <action android:name="com.bt.ACTION_START_SERVICE"/>
         </intent>
+        <!-- entregar a atualização pro KingInstaller (Android 12+, origem Play) -->
+        <package android:name="com.example.kinginstaller"/>
     </queries>
 
     <application
