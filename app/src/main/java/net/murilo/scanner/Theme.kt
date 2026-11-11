@@ -12,14 +12,17 @@ import android.graphics.Color
 object Theme {
     private const val PREF = "theme_prefs"
 
-    const val DEF_BG = 0xFF0A141D.toInt()
-    const val DEF_RING = 0xFF2B82D8.toInt()
-    const val DEF_PROGRESS = 0xFFA7D8E6.toInt()  // preenchimento do anel que segue o ponteiro
-    const val DEF_NEEDLE = 0xFFE23C3C.toInt()
+    // padrão preto + vermelho (tema do app). Tons distintos de propósito: anel aço (ticks saem
+    // dele por lighten), preenchimento vermelho translúcido, ponteiro branco (não some sobre o
+    // vermelho do preenchimento/zona), shift laranja.
+    const val DEF_BG = 0xFF0B0A0A.toInt()
+    const val DEF_RING = 0xFF6E7278.toInt()
+    const val DEF_PROGRESS = 0xFFE23C3C.toInt()  // preenchimento do anel que segue o ponteiro
+    const val DEF_NEEDLE = 0xFFF2EDEB.toInt()
     const val DEF_REDLINE = 0xFFE23C3C.toInt()
-    const val DEF_TEXT = 0xFFEAF4FF.toInt()
-    const val DEF_GRIFFIN = 0xFFFFFFFF.toInt()   // branco = grifo cinza original (tint neutro)
-    const val DEF_SHIFT_COLOR = 0xFFFF3030.toInt()
+    const val DEF_TEXT = 0xFFF2EDEB.toInt()
+    const val DEF_GRIFFIN = 0xFFE23C3C.toInt()   // tinge o grifo de vermelho (igual ao ícone)
+    const val DEF_SHIFT_COLOR = 0xFFFF8C1A.toInt()
     const val DEF_SHIFT_RPM = 6500
     const val DEF_MENU_BG = 0xFF0A0A0A.toInt()      // menu: fundo (padrao preto)
     const val DEF_MENU_ACCENT = 0xFFE23C3C.toInt()  // menu: destaque (padrao vermelho)

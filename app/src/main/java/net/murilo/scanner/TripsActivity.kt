@@ -65,6 +65,18 @@ class TripsActivity : Activity() {
     override fun onPause() { super.onPause(); h.removeCallbacks(refresher) }
 
     private fun render() {
+        val files = TripLogger.list(this).filter { it.length() > 200 }
+        if (files.any { !Trip.cached(it) }) {
+            // primeira entrada: parse dos CSVs fora da UI (travava a tela e o toque)
+            setContentView(Ui.loading(this, "Carregando sessões…"))
+            Thread {
+                files.forEach { Trip.of(it) }
+                runOnUiThread { if (!isFinishing) renderNow(files) }
+            }.start()
+        } else renderNow(files)
+    }
+
+    private fun renderNow(files: List<File>) {
         val c = this
         wasActive = TripLogger.active
         liveTimer = null; livePts = null
@@ -95,7 +107,6 @@ class TripsActivity : Activity() {
             col.addView(live, cardLp())
         }
 
-        val files = TripLogger.list(c).filter { it.length() > 200 }
         if (files.isEmpty() && !TripLogger.active) {
             col.addView(Ui.text(c, "Nenhuma sessão ainda.\nConecte o scanner (ou simule) que ele grava sozinho.", 14f, Ui.MUTED).apply {
                 gravity = Gravity.CENTER; setPadding(0, dp(60), 0, 0)
@@ -108,7 +119,7 @@ class TripsActivity : Activity() {
         val weekAgo = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
         for (f in files) {
             val start = startOf(f)
-            val t = Trip.load(f)
+            val t = Trip.of(f)
             if (start >= weekAgo) { weekKm += t.distanceKm; weekN++ }
             val day = dayLabel(start)
             if (day != lastDay) {

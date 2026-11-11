@@ -104,7 +104,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         cFace = Theme.darken(cBg, 0.45f); cFaceEdge = Theme.lighten(cBg, 0.22f)
         cLine = Theme.withAlpha(cText, 42)
         if (Theme.griffin != lastGriffin) {
-            bmpPaint.colorFilter = if (Theme.griffin == Theme.DEF_GRIFFIN) null
+            // branco = arte cinza original (tint neutro); qualquer outra cor tinge por multiplicação
+            bmpPaint.colorFilter = if (Theme.griffin == 0xFFFFFFFF.toInt()) null
                 else PorterDuffColorFilter(Theme.griffin, PorterDuff.Mode.MULTIPLY)
             lastGriffin = Theme.griffin
         }

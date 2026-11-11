@@ -2,35 +2,35 @@ package net.murilo.scanner
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.MapTileProviderBasic
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.Projection
-import org.osmdroid.views.drawing.MapSnapshot
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.ln
 import kotlin.math.min
+import kotlin.math.tan
 
 /** Gera um CARTÃO (imagem PNG) da viagem p/ compartilhar: mapa de rua (OSM) com o trajeto + números.
- *  Baixa tiles da internet — chamar FORA da thread de UI. Sem internet, cai no traçado simples. */
+ *  Os tiles são baixados direto (Web Mercator na mão — o MapSnapshot do osmdroid não entregava).
+ *  Baixa da internet: chamar FORA da thread de UI. Sem internet, cai no traçado simples. */
 object TripImage {
-    private const val BG = "#0A141D"
-    private const val PANEL = "#0F1C27"
+    private const val BG = "#0B0A0A"
+    private const val PANEL = "#141414"
     private const val ROUTE = "#E23C3C"
-    private const val CYAN = "#C9F2F4"
-    private const val DIM = "#8FB8C8"
+    private const val TEXT = "#F2EDEB"
+    private const val DIM = "#9A9A9E"
 
     fun render(ctx: Context, trip: Trip): Bitmap {
         val w = 1080; val h = 1400
@@ -41,7 +41,7 @@ object TripImage {
         val wf = w.toFloat()
 
         // ---- cabeçalho ----
-        p.color = Color.parseColor(CYAN); p.textSize = 58f; p.isFakeBoldText = true
+        p.color = Color.parseColor(TEXT); p.textSize = 58f; p.isFakeBoldText = true
         p.textAlign = Paint.Align.LEFT
         c.drawText("Civic LX", 60f, 110f, p)
         p.isFakeBoldText = false; p.color = Color.parseColor(DIM); p.textSize = 38f
@@ -51,11 +51,13 @@ object TripImage {
         try {
             val logo = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.gauge_griffin)
             logo?.setBounds(w - 185, 40, w - 55, 170)
+            logo?.colorFilter = android.graphics.PorterDuffColorFilter(
+                Color.parseColor(ROUTE), android.graphics.PorterDuff.Mode.MULTIPLY)
             logo?.draw(c)
         } catch (_: Exception) {}
 
         // ---- mapa do trajeto ----
-        drawRouteCard(ctx, c, RectF(40f, 210f, wf - 40f, 1000f), trip, p)
+        drawRouteCard(c, RectF(40f, 210f, wf - 40f, 1000f), trip, p)
 
         // ---- números ----
         val dur = fmtDur(trip.durationMs)
@@ -86,8 +88,8 @@ object TripImage {
         return bmp
     }
 
-    /** Painel do trajeto: mapa de rua quando os tiles vêm; senão o traçado simples. */
-    private fun drawRouteCard(ctx: Context, c: Canvas, r: RectF, trip: Trip, p: Paint) {
+    /** Painel do trajeto: mapa de rua quando os tiles vêm; senão o traçado simples no escuro. */
+    private fun drawRouteCard(c: Canvas, r: RectF, trip: Trip, p: Paint) {
         p.style = Paint.Style.FILL
         p.color = Color.parseColor(PANEL); c.drawRoundRect(r, 28f, 28f, p)
         val pts = trip.route
@@ -98,13 +100,12 @@ object TripImage {
         }
         val clip = Path().apply { addRoundRect(r, 28f, 28f, Path.Direction.CW) }
         c.save(); c.clipPath(clip)
-        val snap = mapSnapshot(ctx, r.width().toInt(), r.height().toInt(), pts)
+        val snap = osmMap(r.width().toInt(), r.height().toInt(), pts)
         if (snap != null) {
-            val (mapBmp, proj) = snap
+            val (mapBmp, toPx) = snap
             c.drawBitmap(mapBmp, r.left, r.top, null)
             drawPolyline(c, pts, p, casing = true) { la, lo ->
-                val pt = proj.toPixels(GeoPoint(la, lo), null)
-                floatArrayOf(r.left + pt.x, r.top + pt.y)
+                val q = toPx(la, lo); floatArrayOf(r.left + q[0], r.top + q[1])
             }
         } else {
             // offline/tiles indisponíveis: projeção plana sobre o painel escuro
@@ -141,37 +142,61 @@ object TripImage {
         p.color = Color.parseColor("#E23C3C"); c.drawCircle(b[0], b[1], 15f, p)
     }
 
-    /** Tiles do OSM renderizados no tamanho do painel (bloqueia até ~12 s); null se não vierem. */
-    private fun mapSnapshot(ctx: Context, w: Int, h: Int, pts: List<TripSample>): Pair<Bitmap, Projection>? {
-        var provider: MapTileProviderBasic? = null
-        return try {
-            Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-            Configuration.getInstance().userAgentValue = ctx.packageName
-            val bbox = BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) })
-            var zoom = MapView.getTileSystem().getBoundingBoxZoom(bbox, w - 110, h - 110)
-            if (zoom.isNaN() || zoom <= 0) zoom = 16.0
-            zoom = zoom.coerceIn(3.0, 18.0)
-            val proj = Projection(zoom, w, h, GeoPoint(bbox.centerLatitude, bbox.centerLongitude),
-                0f, true, true, 0, 0)
-            val prov = MapTileProviderBasic(ctx, TileSourceFactory.MAPNIK)
-            provider = prov
-            var out: Bitmap? = null
-            val done = CountDownLatch(1)
-            val snap = MapSnapshot(MapSnapshot.MapSnapshotable { s ->
-                if (s.status == MapSnapshot.Status.CANVAS_OK) {
-                    out = s.bitmap?.copy(Bitmap.Config.ARGB_8888, false)
-                    done.countDown()
-                }
-            }, MapSnapshot.INCLUDE_FLAG_UPTODATE, prov, emptyList(), proj)
-            Thread(snap).start()
-            done.await(12, TimeUnit.SECONDS)
-            out?.let { it to proj }
-        } catch (_: Throwable) {
-            null
-        } finally {
-            try { provider?.detach() } catch (_: Exception) {}
-        }
+    // --- mapa de rua na mão: tiles 256px do OSM + projeção Web Mercator ---
+
+    private fun mx(lon: Double) = (lon + 180.0) / 360.0
+    private fun my(lat: Double): Double {
+        val rad = Math.toRadians(lat.coerceIn(-85.05, 85.05))
+        return (1 - ln(tan(rad) + 1 / cos(rad)) / PI) / 2
     }
+
+    /** Bitmap w×h com os tiles cobrindo os pontos + função (lat,lon)→pixel. Null se nenhum tile veio. */
+    private fun osmMap(w: Int, h: Int, pts: List<TripSample>): Pair<Bitmap, (Double, Double) -> FloatArray>? {
+        return try {
+            var minLa = 90.0; var maxLa = -90.0; var minLo = 180.0; var maxLo = -180.0
+            for (s in pts) { minLa = minOf(minLa, s.lat); maxLa = maxOf(maxLa, s.lat); minLo = minOf(minLo, s.lon); maxLo = maxOf(maxLo, s.lon) }
+            val fx = mx(maxLo) - mx(minLo); val fy = my(minLa) - my(maxLa)
+            var z = 18
+            while (z > 3 && (fx * 256.0 * (1 shl z) > w - 120 || fy * 256.0 * (1 shl z) > h - 120)) z--
+            val world = 256.0 * (1 shl z)
+            val left = (mx(minLo) + mx(maxLo)) / 2 * world - w / 2.0
+            val top = (my(minLa) + my(maxLa)) / 2 * world - h / 2.0
+
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            c.drawColor(Color.parseColor(PANEL))
+            val n = 1 shl z
+            val jobs = ArrayList<Callable<Triple<Int, Int, Bitmap?>>>()
+            for (tx in Math.floorDiv(left.toInt(), 256)..Math.floorDiv((left + w).toInt(), 256))
+                for (ty in Math.floorDiv(top.toInt(), 256)..Math.floorDiv((top + h).toInt(), 256)) {
+                    if (ty < 0 || ty >= n) continue
+                    val wx = ((tx % n) + n) % n
+                    jobs.add(Callable { Triple(tx, ty, fetchTile(z, wx, ty)) })
+                }
+            val pool = Executors.newFixedThreadPool(2)   // política do OSM: no máx 2 conexões
+            var got = 0
+            try {
+                for (f in pool.invokeAll(jobs, 15, TimeUnit.SECONDS)) {
+                    val (tx, ty, tile) = try { f.get() } catch (_: Exception) { continue }
+                    if (tile != null) {
+                        c.drawBitmap(tile, (tx * 256 - left).toFloat(), (ty * 256 - top).toFloat(), null)
+                        got++
+                    }
+                }
+            } finally { pool.shutdownNow() }
+            if (got == 0) return null
+            bmp to { la: Double, lo: Double ->
+                floatArrayOf((mx(lo) * world - left).toFloat(), (my(la) * world - top).toFloat())
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    private fun fetchTile(z: Int, x: Int, y: Int): Bitmap? = try {
+        val u = URL("https://tile.openstreetmap.org/$z/$x/$y.png").openConnection() as HttpURLConnection
+        u.setRequestProperty("User-Agent", "net.murilo.scanner")   // política do OSM: UA identificável
+        u.connectTimeout = 5000; u.readTimeout = 8000
+        u.inputStream.use { BitmapFactory.decodeStream(it) }
+    } catch (_: Exception) { null }
 
     private fun fmtDur(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
 }

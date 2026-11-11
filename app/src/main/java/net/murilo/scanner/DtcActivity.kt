@@ -78,7 +78,7 @@ class DtcActivity : Activity() {
         if (codes.isEmpty()) {
             val card = Ui.card(this).apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
             card.addView(View(this).apply {
-                background = Ui.rounded(Ui.ACCENT, dp(6).toFloat())
+                background = Ui.rounded(Ui.OK, dp(6).toFloat())
                 layoutParams = LinearLayout.LayoutParams(dp(12), dp(12))
             })
             card.addView(Ui.text(this, "Nenhum código de erro", 16f, Ui.TEXT, bold = true).apply {

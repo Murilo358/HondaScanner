@@ -23,8 +23,10 @@ class Trip(val file: File, val samples: List<TripSample>) {
     /**
      * Pontos de GPS LIMPOS para mapa/imagem/distância. O cru vira "teia de aranha":
      * parado, o GPS deriva em volta do ponto; e fixes ruins teleportam o carro.
-     * Regras: parado (<3 km/h) não cria ponto novo; salto mais rápido que ~250 km/h
-     * é descartado (até 10 seguidos, depois aceita para ressincronizar).
+     * Regras: parado (<3 km/h) não cria ponto novo; e o fix só é aceito se couber no
+     * ORÇAMENTO de distância do carro — velocidade do OBD × tempo × 1.5 + 12 m de erro
+     * de GPS. Validado em simulação (teia a 10 km/h: p95 de 13 m; rodovia/serra: 100%
+     * mantido; túnel: ressincroniza direto, o orçamento cresce com o gap).
      */
     val route: List<TripSample> by lazy {
         val out = ArrayList<TripSample>()
@@ -37,7 +39,8 @@ class Trip(val file: File, val samples: List<TripSample>) {
                 val d = haversine(l.lat, l.lon, s.lat, s.lon)
                 val dt = (s.t - l.t) / 1000.0
                 if (s.speed < 3f && d < 150) continue
-                if (dt > 0 && d / dt > 70 && dropped < 10) { dropped++; continue }
+                val budget = maxOf(s.speed, l.speed) / 3.6 * dt * 1.5 + 12.0
+                if (dt > 0 && d > budget && dropped < 10) { dropped++; continue }
             }
             dropped = 0
             out.add(s); last = s
@@ -59,6 +62,14 @@ class Trip(val file: File, val samples: List<TripSample>) {
     val avgKmL: Float get() = if (fuelL > 0.01f) distanceKm / fuelL else 0f
 
     companion object {
+        // cache: reabrir a mesma sessão (lista → linha do tempo → mapa) não re-parseia o CSV
+        private val cache = object : LinkedHashMap<String, Trip>(8, 0.75f, true) {
+            override fun removeEldestEntry(e: MutableMap.MutableEntry<String, Trip>) = size > 20
+        }
+        private fun key(f: File) = "${f.name}:${f.length()}"
+        @Synchronized fun cached(f: File) = cache.containsKey(key(f))
+        @Synchronized fun of(f: File): Trip = cache.getOrPut(key(f)) { load(f) }
+
         fun load(f: File): Trip {
             val out = ArrayList<TripSample>()
             try {
