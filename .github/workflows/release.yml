@@ -26,6 +26,25 @@ jobs:
           # lista explícita: o padrão da action inclui 'tools', que o Google removeu do SDK
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
+      - name: Keystore do projeto (secret DEBUG_KEYSTORE, base64)
+        # sem ela cada build sai com assinatura diferente e o update in-app é recusado
+        env:
+          DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE" ]; then
+            echo "$DEBUG_KEYSTORE" | base64 -d > debug.keystore
+            echo "keystore do projeto instalada"
+          else
+            echo "::warning::secret DEBUG_KEYSTORE ausente — APK sairá com assinatura aleatória (update in-app não vai funcionar)"
+          fi
+
+      - name: Versão do app = tag (ex.: v0.36 -> versionName 0.36 / versionCode 36)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          CODE=$(echo "$V" | awk -F. '{print $1*1000+$2}')
+          sed -i "s/versionCode .*/versionCode $CODE/; s/versionName '[^']*'/versionName '$V'/" app/build.gradle
+
       - name: Gerar instalador (app embutido) — mesmo fluxo do build-installer.sh
         run: |
           chmod +x gradlew
