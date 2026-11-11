@@ -108,20 +108,27 @@ object UpdateCheck {
         }
         if (installedViaPlay(act)) {
             // 12+: instalar direto troca a origem (vira packageinstaller) e o app some do
-            // Android Auto. Só o KingInstaller+Shizuku preserva — entrega o APK pra ele.
-            AlertDialog.Builder(act).setTitle("Instalar pelo KingInstaller")
-                .setMessage("Neste aparelho a atualização precisa ir pelo KingInstaller para o app continuar aparecendo no Android Auto (origem Play), como na primeira instalação.")
-                .setPositiveButton("Abrir") { _, _ -> handToKing(act, f, uri, tag) }
+            // Android Auto — a menos que "Fontes desconhecidas" esteja ligado no modo
+            // desenvolvedor do Android Auto. Então o usuário escolhe o caminho dele.
+            AlertDialog.Builder(act).setTitle("Como instalar a atualização")
+                .setMessage("Este app está com origem Play (esquema do Android Auto).\n\n" +
+                    "• KingInstaller (Shizuku rodando): mantém a origem Play, como na primeira instalação.\n\n" +
+                    "• Direto: dois toques, mas a origem se perde — o app só continua no Android Auto " +
+                    "se \"Fontes desconhecidas\" estiver ligado no modo desenvolvedor dele.")
+                .setPositiveButton("KingInstaller") { _, _ -> handToKing(act, f, uri, tag) }
+                .setNeutralButton("Direto") { _, _ -> act.startActivity(viewIntent(uri)) }
                 .setNegativeButton("Depois", null).show()
             return
         }
         // sem esquema de origem: instalador normal do sistema
         // shortcut: no 13+ com source=STORE a atualização direta perde o STORE; se algum
         // aparelho depender disso, copiar o installSession() do módulo installer
-        act.startActivity(Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, APK_MIME)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        })
+        act.startActivity(viewIntent(uri))
+    }
+
+    private fun viewIntent(uri: android.net.Uri) = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, APK_MIME)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     private fun handToKing(act: Activity, f: File, uri: android.net.Uri, tag: String) {
