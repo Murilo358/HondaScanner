@@ -3,7 +3,7 @@ package net.murilo.scanner
 import android.content.Context
 
 /**
- * Combustivel SEM sensor de nivel na ECU (OBD-1 Honda nao manda nivel). Igual ao Hondash:
+ * Combustivel SEM sensor de nivel na ECU (OBD-1 Honda nao manda nivel):
  * calcula a VAZAO pela injecao e INTEGRA o consumo; o nivel = tanque_inicial - consumido.
  *
  * vazao(L/h) = cilindros × (rpm/2 injecoes/min) × injDur(ms) × vazao_bico(cc/min) / 60000 × 60/1000 × corr
@@ -20,6 +20,8 @@ object FuelCalc {
     @Volatile var cylinders = 4
     @Volatile var corr = 1.0f       // fator de calibracao
 
+    @Volatile var everFilled = false       // ja marcou "tanque cheio" alguma vez? antes disso o nivel e chute
+        private set
     @Volatile private var consumedL = 0f   // litros desde o ultimo "tanque cheio"
     private var avgEcon = 0f               // media movel km/L (p/ autonomia)
     private var lastNs = 0L
@@ -33,6 +35,7 @@ object FuelCalc {
             tankL = p.getFloat("tank", 45f); injCc = p.getFloat("injcc", 240f)
             cylinders = p.getInt("cyl", 4); corr = p.getFloat("corr", 1f)
             consumedL = p.getFloat("consumed", 0f); avgEcon = p.getFloat("avgecon", 0f)
+            everFilled = p.getBoolean("filled", false)
         } catch (_: Exception) {}
     }
 
@@ -40,7 +43,8 @@ object FuelCalc {
         try {
             ctx?.getSharedPreferences(PREF, Context.MODE_PRIVATE)?.edit()
                 ?.putFloat("tank", tankL)?.putFloat("injcc", injCc)?.putInt("cyl", cylinders)
-                ?.putFloat("corr", corr)?.putFloat("consumed", consumedL)?.putFloat("avgecon", avgEcon)?.apply()
+                ?.putFloat("corr", corr)?.putFloat("consumed", consumedL)?.putFloat("avgecon", avgEcon)
+                ?.putBoolean("filled", everFilled)?.apply()
         } catch (_: Exception) {}
     }
 
@@ -69,7 +73,7 @@ object FuelCalc {
     }
 
     /** "Enchi o tanque" — zera o consumido (nivel = cheio). */
-    fun fillFull() { consumedL = 0f; save() }
+    fun fillFull() { consumedL = 0f; everFilled = true; save() }
 
     fun setConfig(tank: Float, cc: Float, cyl: Int, correction: Float) {
         tankL = tank; injCc = cc; cylinders = cyl; corr = correction; save()

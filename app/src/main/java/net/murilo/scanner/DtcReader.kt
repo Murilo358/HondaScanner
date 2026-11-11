@@ -1,5 +1,7 @@
 package net.murilo.scanner
 
+import android.content.Context
+
 /**
  * Códigos de erro (DTC) do Honda OBD-1, lidos da memória da ECU em 0x40–0x5F (o scanner já pola
  * esses blocos -> ficam em dash.rawBlocks). Para o código N: endereço = 0x40 + N/2, nibble = par→baixo,
@@ -21,6 +23,29 @@ object DtcReader {
     )
 
     fun hasData(dash: Dash) = dash.rawBlocks[0x40] != null || dash.rawBlocks[0x50] != null
+
+    // --- última leitura persistida: as telas mostram o que foi visto na última viagem,
+    //     sem exigir o scanner conectado ---
+    private const val PREF = "dtc_prefs"
+
+    fun persist(ctx: Context, codes: List<Dtc>) {
+        try {
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+                .putString("codes", codes.joinToString(",") { it.code.toString() })
+                .putLong("when", System.currentTimeMillis()).apply()
+        } catch (_: Exception) {}
+    }
+
+    /** Códigos da última leitura + quando foi, ou null se nunca leu. */
+    fun lastSaved(ctx: Context): Pair<List<Dtc>, Long>? = try {
+        val p = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val whenMs = p.getLong("when", 0L)
+        if (whenMs == 0L) null else {
+            val codes = (p.getString("codes", "") ?: "").split(",").filter { it.isNotBlank() }
+                .mapNotNull { it.toIntOrNull() }.map { Dtc(it, TABLE[it] ?: "Código $it (ver manual)") }
+            codes to whenMs
+        }
+    } catch (_: Exception) { null }
 
     fun read(dash: Dash): List<Dtc> {
         val b40 = dash.rawBlocks[0x40]; val b50 = dash.rawBlocks[0x50]

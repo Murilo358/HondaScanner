@@ -14,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Diagnóstico (design 6A): cada código vira um cartão com sintoma e causa comum em linguagem
+/** Diagnóstico: cada código vira um cartão com sintoma e causa comum em linguagem
  *  de oficina; limpar fica separado, com a consequência escrita. Sem códigos, vira o estado
  *  "limpo e vigiando". */
 class DtcActivity : Activity() {
@@ -51,8 +51,16 @@ class DtcActivity : Activity() {
         val dash = Shared.dash
         val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         if (dash == null || !dash.connected) {
-            headRight.text = ""
-            content.addView(centerCard("Conecte o scanner", "para ler os códigos gravados na ECU"))
+            // sem scanner: mostra a última leitura feita em viagem, se houver
+            val saved = DtcReader.lastSaved(this)
+            if (saved == null) {
+                headRight.text = ""
+                content.addView(centerCard("Conecte o scanner", "para ler os códigos gravados na ECU"))
+                return
+            }
+            headRight.text = "última leitura " +
+                SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(saved.second))
+            showCodes(saved.first, live = false, emptySub = "nenhum código na última leitura")
             return
         }
         if (!DtcReader.hasData(dash)) {
@@ -62,7 +70,11 @@ class DtcActivity : Activity() {
         }
         headRight.text = "lido agora, $now"
         val codes = DtcReader.read(dash)
+        DtcReader.persist(this, codes)
+        showCodes(codes, live = true, emptySub = "ECU verificada às $now", mil = dash.mil)
+    }
 
+    private fun showCodes(codes: List<DtcReader.Dtc>, live: Boolean, emptySub: String, mil: Boolean = false) {
         if (codes.isEmpty()) {
             val card = Ui.card(this).apply { gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
             card.addView(View(this).apply {
@@ -72,7 +84,7 @@ class DtcActivity : Activity() {
             card.addView(Ui.text(this, "Nenhum código de erro", 16f, Ui.TEXT, bold = true).apply {
                 gravity = Gravity.CENTER; setPadding(0, dp(10), 0, 0)
             })
-            card.addView(Ui.text(this, "ECU verificada às $now", 13f, Ui.MUTED).apply {
+            card.addView(Ui.text(this, emptySub, 13f, Ui.MUTED).apply {
                 gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0)
             })
             content.addView(card, lp(8))
@@ -88,12 +100,13 @@ class DtcActivity : Activity() {
         status.addView(Ui.text(this, " gravado${if (n == 1) "" else "s"} na ECU", 15f, Ui.MUTED).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        if (dash.mil) status.addView(Ui.statusPill(this, "luz de injeção acesa", Ui.PILL_WARN_BG, Ui.WARN))
+        if (mil) status.addView(Ui.statusPill(this, "luz de injeção acesa", Ui.PILL_WARN_BG, Ui.WARN))
         content.addView(status)
 
         for (code in codes) content.addView(dtcCard(code), lp(10))
 
-        // depois do reparo
+        // depois do reparo (limpar só funciona com o scanner conectado)
+        if (!live) return
         val act = Ui.card(this)
         act.addView(Ui.text(this, "Depois do reparo", 13f, Ui.TEXT, bold = true))
         act.addView(Ui.text(this, "Limpar apaga os códigos da ECU. Se o problema continuar, a luz de injeção volta a acender.", 12.5f, Ui.MUTED).apply {

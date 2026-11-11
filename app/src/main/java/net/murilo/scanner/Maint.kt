@@ -3,10 +3,14 @@ package net.murilo.scanner
 import android.content.Context
 
 /** Lembretes de manutenção por km, usando o hodômetro do app ([Stats.totalKm]).
- *  Itens de fábrica + serviços cadastrados pelo usuário (persistidos em prefs). */
+ *  Itens de fábrica + serviços cadastrados pelo usuário (persistidos em prefs).
+ *  Item de fábrica nunca marcado começa "não registrado" ([lastKm] = NaN): sem contagem
+ *  nem "vencida" até o usuário marcar o serviço pela primeira vez. */
 object Maint {
     class Item(val key: String, var name: String, var intervalKm: Float, var lastKm: Float,
-               val custom: Boolean = false)
+               val custom: Boolean = false) {
+        val registered: Boolean get() = !lastKm.isNaN()
+    }
 
     private fun builtin() = listOf(
         Item("oil", "Troca de óleo", 5000f, 0f),
@@ -25,7 +29,10 @@ object Maint {
         items.clear(); items.addAll(builtin())
         try {
             val p = ctx!!.getSharedPreferences("maint_prefs", Context.MODE_PRIVATE)
-            items.forEach { it.intervalKm = p.getFloat("${it.key}_int", it.intervalKm); it.lastKm = p.getFloat("${it.key}_last", 0f) }
+            items.forEach {
+                it.intervalKm = p.getFloat("${it.key}_int", it.intervalKm)
+                it.lastKm = if (p.contains("${it.key}_last")) p.getFloat("${it.key}_last", 0f) else Float.NaN
+            }
             for (k in p.getStringSet("custom_keys", emptySet()) ?: emptySet()) {
                 items.add(Item(k, p.getString("${k}_name", "Serviço") ?: "Serviço",
                     p.getFloat("${k}_int", 10000f), p.getFloat("${k}_last", 0f), custom = true))
@@ -38,7 +45,8 @@ object Maint {
     private fun save(i: Item) {
         try {
             prefs()?.edit()?.apply {
-                putFloat("${i.key}_int", i.intervalKm); putFloat("${i.key}_last", i.lastKm)
+                putFloat("${i.key}_int", i.intervalKm)
+                if (i.registered) putFloat("${i.key}_last", i.lastKm)
                 if (i.custom) putString("${i.key}_name", i.name)
             }?.apply()
         } catch (_: Exception) {}
@@ -63,8 +71,8 @@ object Maint {
         saveCustomKeys()
     }
 
-    /** km restantes até o serviço (negativo = vencido). */
-    fun remainingKm(i: Item) = i.intervalKm - (Stats.totalKm - i.lastKm)
+    /** km restantes até o serviço (negativo = vencido; NaN = nunca registrado). */
+    fun remainingKm(i: Item) = i.intervalKm - (Stats.totalKm - i.lastKm)   // NaN propaga
     fun markDone(i: Item) { i.lastKm = Stats.totalKm; save(i) }
     fun setInterval(i: Item, km: Float) { i.intervalKm = km; save(i) }
     fun anyOverdue() = items.any { remainingKm(it) < 0f }

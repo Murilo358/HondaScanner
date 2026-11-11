@@ -11,7 +11,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 
-/** Manutenção (design 9A): itens ordenados por urgência; o vencido abre a tela com "Feito hoje"
+/** Manutenção: itens ordenados por urgência; o vencido abre a tela com "Feito hoje"
  *  no próprio cartão e a barra mostra o intervalo consumido (excedente em vermelho). */
 class MaintActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); Theme.init(this); render() }
@@ -43,6 +43,31 @@ class MaintActivity : Activity() {
     private fun itemCard(item: Maint.Item): View {
         val c = this
         val r = Maint.remainingKm(item)
+
+        // nunca registrado: sem contagem inventada — só convida a marcar a primeira vez
+        if (!item.registered) {
+            val card = Ui.card(c).apply { isClickable = true; setOnClickListener { itemMenu(item) } }
+            val top = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val texts = LinearLayout(c).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            texts.addView(Ui.text(c, item.name, 15f, Ui.TEXT, bold = true))
+            texts.addView(Ui.text(c, "não registrada — marque quando fizer o serviço", 12f, Ui.MUTED))
+            top.addView(texts)
+            top.addView(Ui.pill(c, "Feito", primary = false) {
+                AlertDialog.Builder(c).setTitle("Marcar como feito?")
+                    .setMessage("${item.name} feita hoje, a ${Stats.totalKm.toInt()} km do app. A contagem do intervalo começa agora.")
+                    .setPositiveButton("Feito") { _, _ -> Maint.markDone(item); render() }
+                    .setNegativeButton("Cancelar", null).show()
+            }.apply { textSize = 12.5f; minHeight = dp(32); setPadding(dp(14), dp(5), dp(14), dp(5)) })
+            card.addView(top)
+            card.addView(Ui.text(c, "intervalo ${item.intervalKm.toInt()} km", 11f, Ui.FAINT).apply {
+                setPadding(0, dp(8), 0, 0)
+            })
+            return card
+        }
+
         val overdue = r < 0f
         val elapsed = item.intervalKm - r                       // km rodados desde o serviço
         val usedFrac = (elapsed / item.intervalKm).coerceIn(0f, 1f)
