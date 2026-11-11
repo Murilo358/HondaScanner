@@ -1,7 +1,7 @@
 package net.murilo.scanner
 
 /**
- * Protocolo do scanner Hondash (Honda OBD-I), decodificado de captura HCI real.
+ * Protocolo do scanner (Honda OBD-I), decodificado de captura HCI real.
  *
  * Requisicao (app -> scanner), 5 bytes:  20 05 <addr> <len> <ck>
  *   ck = (0x100 - (0x20 + 0x05 + addr + len)) & 0xFF

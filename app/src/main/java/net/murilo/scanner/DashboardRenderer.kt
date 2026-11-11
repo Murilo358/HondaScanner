@@ -14,9 +14,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Desenha a tela principal do Hondash num Canvas, dado o tamanho e o [Dash].
- * Geometria em "unidades GL" (centro na origem, y para cima), como o app original,
- * convertidas para pixels de tela. Usado tanto no celular quanto no Android Auto.
+ * Desenha o painel clássico num Canvas, dado o tamanho e o [Dash].
+ * Geometria em "unidades GL" (centro na origem, y para cima) convertida para pixels de tela.
+ * Usado tanto no celular quanto no Android Auto.
  *
  * Mudou algo visual? E so aqui.
  */

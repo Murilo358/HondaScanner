@@ -13,7 +13,8 @@
 #                      default_6in.ini (800x480), default_720p.ini (1280x720),
 #                      default_1080p.ini (1920x1080)
 set -e
-DHU="/home/murilo/Desktop/hondash/hondash-aa/.tools/sdk/extras/google/auto"
+# pasta do DHU no SDK; sobrescreva com a variavel DHU se estiver em outro lugar
+DHU="${DHU:-$HOME/Android/Sdk/extras/google/auto}"
 PROFILE="${1:-custom_628.ini}"
 
 if [ ! -f "$DHU/config/$PROFILE" ]; then

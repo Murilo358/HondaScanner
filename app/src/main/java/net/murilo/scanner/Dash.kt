@@ -89,9 +89,8 @@ class Dash {
 }
 
 /**
- * Mapeamento byte -> sensor -> escala. Formulas CONFERIDAS (2026-10-21) contra valores
- * reais do Hondash, usando o log de motor ligado e o repo andgarriv/Honda-ECU-Data (mesmo
- * protocolo). Detalhes em /home/murilo/Desktop/hondash/PROTOCOLO-HONDASH-ECU.md secao 6.
+ * Mapeamento byte -> sensor -> escala. Formulas conferidas contra log real de motor ligado
+ * e o repo andgarriv/Honda-ECU-Data (mesmo protocolo).
  * Convencao: bloco 0xNN, offset k  ==  RAM 0xNN+k. 16-bit desta ECU e BIG-ENDIAN.
  * Este e o unico lugar que precisa mudar para ajustar escalas.
  */
@@ -99,7 +98,7 @@ object SensorMap {
     private fun u8(d: ByteArray, i: Int) = if (i < d.size) d[i].toInt() and 0xFF else 0
     private fun u16be(d: ByteArray, i: Int) = (u8(d, i) shl 8) or u8(d, i + 1)
 
-    /** Temperatura (ECT/IAT): polinomio de 5o grau do Hondash (C1096w) = curva do termistor. */
+    /** Temperatura (ECT/IAT): polinomio de 5o grau = curva do termistor. */
     private fun temp(x: Int): Float {
         val d = x.toDouble()
         return (155.04149 - 3.0414878 * d + 0.03952185 * d * d - 2.9383913e-4 * d * d * d +
@@ -113,7 +112,7 @@ object SensorMap {
             0x00 -> {
                 dash.rpm = (u16be(d, 0) / 4f)                      // [0:2] BE / 4
                 dash.speed = u8(d, 2).toFloat()                    // [2] -> km/h (VSS)
-                // Marcha: detector aprende as razoes RPM/velocidade (como o Hondash). N parado.
+                // Marcha: detector aprende as razoes RPM/velocidade. N parado.
                 dash.gear = GearDetector.update(dash.rpm, dash.speed, learn = true)
             }
             // Bloco 0x10 (RAM 0x10-0x1b): sensores analogicos principais.
@@ -123,7 +122,7 @@ object SensorMap {
                 dash.map = u8(d, 2) * 7.5f - 75f                   // 0x12 -> mBar   (C1095v)
                 dash.tps = ((u8(d, 4) - 25) / 2.09f).coerceIn(0f, 100f) // 0x14 -> %  (C1097x)
                 dash.o2Volt = u8(d, 5).toFloat()                   // 0x15 -> sonda O2 (cru)
-                // Lambda estimado (emulado, como no Hondash): tensao = cru/51 (W5.g);
+                // Lambda estimado (emulado): tensao = cru/51;
                 // curva generica de banda estreita (lambda=1 em ~0,45V). So referencia.
                 val o2v = (u8(d, 5) / 51f).coerceIn(0f, 1f)
                 dash.lambda = (1.0f - 0.30f * (o2v - 0.45f)).coerceIn(0.80f, 1.20f)

@@ -11,7 +11,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 
-/** Um canal do datalog (RPM, velocidade, água…) com cor e faixa. */
+/** Um canal do datalog (RPM, velocidade, arrefecimento…) com cor e faixa. */
 class Channel(
     val key: String, val name: String, val unit: String, val color: Int,
     val get: (TripSample) -> Float, val fixedMin: Float? = null, val fixedMax: Float? = null,
@@ -19,7 +19,7 @@ class Channel(
 )
 
 /**
- * Gráficos empilhados no modelo do Hondash: CURSOR FIXO NO CENTRO e o gráfico corre por baixo.
+ * Gráficos empilhados: CURSOR FIXO NO CENTRO e o gráfico corre por baixo.
  * Arrastar na horizontal anda no tempo; pinça estica (tempo / altura das faixas); 2 toques = normal.
  * Cada faixa: máx em cima e mín embaixo à esquerda, nome [unidade] no meio, valor GRANDE à direita
  * do cursor, linha colorida com preenchimento. Vai dentro de um ScrollView (rola na vertical).
@@ -28,7 +28,7 @@ class DatalogView(context: Context) : View(context) {
     var trip: Trip? = null
         set(v) {
             field = v
-            // janela inicial ≈ 2 min (como a sensação de uso do Hondash), nunca menos que a viagem toda
+            // janela inicial ≈ 2 min, nunca menos que a viagem toda
             val total = ((v?.durationMs ?: 0L)).coerceAtLeast(1L)
             timeZoom = (total / 120_000f).coerceAtLeast(1f)
             requestLayout(); invalidate(); notifyWindow()
