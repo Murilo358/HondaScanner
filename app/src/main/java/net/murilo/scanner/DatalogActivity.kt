@@ -37,7 +37,7 @@ class DatalogActivity : Activity() {
     private var playing = false
     private lateinit var playBtn: TextView
 
-    private val CYAN = Color.parseColor("#C9F2F4"); private val DIM = Color.parseColor("#8a8c92")
+    private val CYAN = Color.parseColor("#F2EDEB"); private val DIM = Color.parseColor("#8a8c92")
 
     private val channels by lazy {
         listOf(
@@ -60,8 +60,17 @@ class DatalogActivity : Activity() {
         Theme.init(this)
         tripPath = intent.getStringExtra("trip") ?: ""
         if (tripPath.isEmpty()) { finish(); return }
-        trip = Trip.load(File(tripPath))
+        val f = File(tripPath)
+        if (Trip.cached(f)) { trip = Trip.of(f); buildUi(); return }
+        // CSV grande: parse fora da UI (travava a tela ao abrir a sessão)
+        setContentView(Ui.loading(this, "Carregando sessão…"))
+        Thread {
+            val t = Trip.of(f)
+            runOnUiThread { if (!isFinishing) { trip = t; buildUi() } }
+        }.start()
+    }
 
+    private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#101013")) }
 
         // cabeçalho fino: voltar + nome/data + resumo
@@ -176,7 +185,7 @@ class DatalogActivity : Activity() {
         }
     }
     private fun togglePlay() { if (playing) stopPlay() else { playing = true; playBtn.text = "❚❚"; h.post(playTick) } }
-    private fun stopPlay() { playing = false; playBtn.text = "▶" }
+    private fun stopPlay() { playing = false; if (this::playBtn.isInitialized) playBtn.text = "▶" }
 
     /** ☰ — lista de canais com marcação. */
     private fun channelDialog() {

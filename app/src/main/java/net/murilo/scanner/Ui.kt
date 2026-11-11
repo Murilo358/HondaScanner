@@ -20,7 +20,8 @@ object Ui {
     const val TEXT = 0xFFFFFFFF.toInt()
     const val MUTED = 0xFFB4B4B4.toInt()
     const val FAINT = 0xFF949494.toInt()
-    const val ACCENT = 0xFFC6F24E.toInt()   // lime: única cor de dado
+    const val ACCENT = 0xFFE23C3C.toInt()   // vermelho: única cor de dado (tema do app)
+    const val OK = 0xFF2DC06E.toInt()       // verde: estado bom (não usar o accent, que agora é vermelho)
     const val NEG = 0xFFE5484D.toInt()
     const val WARN = 0xFFE5A93B.toInt()
     const val PILL_WARN_BG = 0xFF2B2414.toInt()
@@ -74,6 +75,13 @@ object Ui {
         })
         if (right != null) row.addView(text(c, right, 12f, MUTED))
         return row
+    }
+
+    /** Tela de espera simples, usada enquanto o CSV da sessão é lido fora da UI. */
+    fun loading(c: Context, msg: String) = LinearLayout(c).apply {
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setBackgroundColor(BG)
+        addView(android.widget.ProgressBar(c))
+        addView(text(c, msg, 14f, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(c, 14), 0, 0) })
     }
 
     /** Barra fina de proporção (6dp): trilho #2a2a2a + preenchimento na fração dada. */

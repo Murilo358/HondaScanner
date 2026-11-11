@@ -150,8 +150,8 @@ class RadarMapActivity : Activity() {
     private inner class RadarOverlay : Overlay() {
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E23C3C"); style = Paint.Style.FILL }
         private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#06111A"); style = Paint.Style.STROKE; strokeWidth = 3f }
-        private val meFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#C9F2F4"); style = Paint.Style.FILL }
-        private val meEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2B82D8"); style = Paint.Style.STROKE; strokeWidth = 4f }
+        private val meFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
+        private val meEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E23C3C"); style = Paint.Style.STROKE; strokeWidth = 4f }
         private val p = Point()
 
         override fun draw(c: Canvas, osmv: MapView, shadow: Boolean) {

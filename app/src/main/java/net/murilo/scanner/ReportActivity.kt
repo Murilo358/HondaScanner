@@ -32,7 +32,7 @@ class ReportActivity : Activity() {
         val live = d != null && d.connected
         // sem scanner conectado, a nota sai do que ficou gravado: última leitura de DTC + última viagem
         val dtcs = if (live) DtcReader.read(d!!) else DtcReader.lastSaved(c)?.first ?: emptyList()
-        val lastTrip = if (!live) TripLogger.list(c).firstOrNull { it.length() > 200 }?.let { Trip.load(it) } else null
+        val lastTrip = if (!live) TripLogger.list(c).firstOrNull { it.length() > 200 }?.let { Trip.of(it) } else null
 
         // mesma régua de pontos de sempre
         var score = 100
@@ -76,7 +76,7 @@ class ReportActivity : Activity() {
             })
         }
         score = score.coerceIn(0, 100)
-        val scoreColor = when { score >= 80 -> Ui.ACCENT; score >= 50 -> Ui.WARN; else -> Ui.NEG }
+        val scoreColor = when { score >= 80 -> Ui.OK; score >= 50 -> Ui.WARN; else -> Ui.NEG }
 
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG)

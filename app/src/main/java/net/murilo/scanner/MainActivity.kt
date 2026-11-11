@@ -64,8 +64,8 @@ class MainActivity : Activity() {
         // menu hamburguer (canto superior esquerdo)
         ham = Button(this).apply {
             text = "☰"; textSize = 20f
-            setTextColor(Color.parseColor("#c9f2f4"))
-            background = pill(Color.parseColor("#331a3748"))
+            setTextColor(Color.parseColor("#F2EDEB"))
+            background = pill(Color.parseColor("#33000000"))
             setOnClickListener { showMenu() }
         }
         root.addView(ham, FrameLayout.LayoutParams(dp(54), dp(54), Gravity.TOP or Gravity.START).apply {
@@ -74,7 +74,7 @@ class MainActivity : Activity() {
 
         // indicador de conexão (contagem até a próxima tentativa / status); toque = tentar agora
         statusChip = TextView(this).apply {
-            textSize = 13f; setTextColor(Color.parseColor("#c9f2f4"))
+            textSize = 13f; setTextColor(Color.parseColor("#F2EDEB"))
             background = pill(Color.parseColor("#33000000"))
             setPadding(dp(14), dp(7), dp(14), dp(7)); visibility = View.GONE
             setOnClickListener { attemptNow() }
@@ -182,7 +182,7 @@ class MainActivity : Activity() {
 
     private fun pill(color: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE; cornerRadius = dp(14).toFloat()
-        setColor(color); setStroke(dp(1), Color.parseColor("#4d82cde1"))
+        setColor(color); setStroke(dp(1), Color.parseColor("#4dE23C3C"))
     }
 
     private fun dp(v: Int) = Math.round(v * resources.displayMetrics.density)
@@ -306,7 +306,8 @@ class MainActivity : Activity() {
                 Dest("Ver sessões gravadas",
                     (if (TripLogger.active) "gravando · " else "") + "${TripLogger.list(this).size}") {
                     startActivity(Intent(this, TripsActivity::class.java))
-                }
+                },
+                Dest("Onde estacionei", null) { showParkedSpot() }
             )
             2 -> listOf(
                 Dest("Diagnóstico (DTC)", null) { startActivity(Intent(this, DtcActivity::class.java)) },
@@ -329,6 +330,20 @@ class MainActivity : Activity() {
             if (d.count != null) r.addView(TextView(this).apply { text = d.count; setTextColor(mut); textSize = 15f; typeface = android.graphics.Typeface.MONOSPACE })
             parent.addView(r)
         }
+    }
+
+    /** Último ponto de GPS da sessão mais recente = onde o carro parou da última vez. */
+    private fun showParkedSpot() {
+        toast("Procurando a última posição…")
+        Thread {
+            val s = TripLogger.list(this).filter { it.length() > 200 }
+                .firstNotNullOfOrNull { f -> Trip.of(f).route.lastOrNull() }
+            runOnUiThread {
+                if (s == null) toast("Nenhuma viagem com GPS ainda")
+                else startActivity(Intent(this, RouteMapActivity::class.java)
+                    .putExtra("lat", s.lat).putExtra("lon", s.lon).putExtra("when", s.t))
+            }
+        }.start()
     }
 
     private fun numInput(title: String, cur: Float, onOk: (Float) -> Unit) {
@@ -381,7 +396,7 @@ class MainActivity : Activity() {
     )
 
     private fun arrowBtn(t: String, onClick: () -> Unit) = Button(this).apply {
-        text = t; textSize = 20f; isAllCaps = false; setTextColor(Color.parseColor("#c9f2f4"))
+        text = t; textSize = 20f; isAllCaps = false; setTextColor(Color.parseColor("#F2EDEB"))
         background = null; minWidth = dp(44); minimumWidth = dp(44); minHeight = dp(44); minimumHeight = dp(44)
         setPadding(dp(8), 0, dp(8), 0); setOnClickListener { onClick() }
     }
@@ -402,8 +417,8 @@ class MainActivity : Activity() {
         }
         var on = initialOn
         fun style() {
-            b.setTextColor(if (on) Color.parseColor("#06222e") else Color.parseColor("#c9f2f4"))
-            b.background = pill(if (on) Color.parseColor("#49c0e0") else Color.parseColor("#33ffffff"))
+            b.setTextColor(if (on) Color.parseColor("#FFFFFF") else Color.parseColor("#F2EDEB"))
+            b.background = pill(if (on) Color.parseColor("#E23C3C") else Color.parseColor("#33ffffff"))
             b.text = (if (on) "● " else "○ ") + label
         }
         b.setOnClickListener { on = !on; style(); onChange(on) }
@@ -416,7 +431,7 @@ class MainActivity : Activity() {
         if (customizer != null) { hideCustomizer(); return }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#ee0a141d"))
+            setBackgroundColor(Color.parseColor("#ee0D0A0A"))
             setPadding(dp(10), dp(8), dp(10), dp(10)); elevation = dp(12).toFloat()
         }
         val content = FrameLayout(this)
@@ -426,8 +441,8 @@ class MainActivity : Activity() {
         val tabBtns = ArrayList<Button>()
         fun selectTab(i: Int) {
             tabBtns.forEachIndexed { idx, b ->
-                b.setTextColor(if (idx == i) Color.parseColor("#06222e") else Color.parseColor("#c9f2f4"))
-                b.background = if (idx == i) pill(Color.parseColor("#49c0e0")) else pill(Color.parseColor("#33ffffff"))
+                b.setTextColor(if (idx == i) Color.parseColor("#FFFFFF") else Color.parseColor("#F2EDEB"))
+                b.background = if (idx == i) pill(Color.parseColor("#E23C3C")) else pill(Color.parseColor("#33ffffff"))
             }
             content.removeAllViews()
             // shift light só aparece em rotação alta: na aba dele, força aceso pra dar pra ver/editar
@@ -488,7 +503,7 @@ class MainActivity : Activity() {
     private fun buildCycle(labels: List<String>, get: () -> Int, set: (Int) -> Unit): View {
         val row = rowH()
         val label = TextView(this).apply {
-            setTextColor(Color.parseColor("#eaf4ff")); textSize = 16f; gravity = Gravity.CENTER; minWidth = dp(240)
+            setTextColor(Color.parseColor("#F2EDEB")); textSize = 16f; gravity = Gravity.CENTER; minWidth = dp(240)
         }
         fun refresh() { label.text = "${labels[get()]}   (${get() + 1}/${labels.size})" }
         fun cycle(d: Int) { val n = labels.size; set(((get() + d) % n + n) % n); refresh(); view.postInvalidate() }
@@ -511,7 +526,7 @@ class MainActivity : Activity() {
         val onRow = rowH()
         onRow.addView(chip("Shift light ligado", Theme.shiftEnabled) { on -> Theme.setShift(on, rpm); view.postInvalidate() })
         col.addView(onRow)
-        val lbl = TextView(this).apply { setTextColor(Color.parseColor("#eaf4ff")); textSize = 14f; text = "RPM de troca: $rpm"; setPadding(0, dp(8), 0, dp(2)) }
+        val lbl = TextView(this).apply { setTextColor(Color.parseColor("#F2EDEB")); textSize = 14f; text = "RPM de troca: $rpm"; setPadding(0, dp(8), 0, dp(2)) }
         col.addView(lbl)
         col.addView(SeekBar(this).apply {
             max = (8000 - 3000) / 100; progress = ((rpm - 3000) / 100).coerceIn(0, max)
@@ -525,7 +540,7 @@ class MainActivity : Activity() {
             })
         })
         val cr = rowH().apply { setPadding(0, dp(8), 0, 0) }
-        cr.addView(TextView(this).apply { text = "Cor:"; setTextColor(Color.parseColor("#c9f2f4")); setPadding(0, 0, dp(8), 0) })
+        cr.addView(TextView(this).apply { text = "Cor:"; setTextColor(Color.parseColor("#F2EDEB")); setPadding(0, 0, dp(8), 0) })
         val sc = HorizontalScrollView(this); val sw = rowH()
         for (pc in PRESETS) sw.addView(swatch(pc, dp(30)) { Theme.set("shiftColor", pc); view.postInvalidate() })
         sc.addView(sw); cr.addView(sc)
@@ -548,7 +563,7 @@ class MainActivity : Activity() {
             val c = Theme.get(curKey())
             seeks[0]?.progress = Color.red(c); seeks[1]?.progress = Color.green(c); seeks[2]?.progress = Color.blue(c)
         }
-        val elLabel = TextView(this).apply { setTextColor(Color.parseColor("#eaf4ff")); textSize = 15f; gravity = Gravity.CENTER; minWidth = dp(150) }
+        val elLabel = TextView(this).apply { setTextColor(Color.parseColor("#F2EDEB")); textSize = 15f; gravity = Gravity.CENTER; minWidth = dp(150) }
         fun elRefresh() { elLabel.text = COLOR_ELEMENTS[ci].second; loadSliders(); updPreview() }
         val elRow = rowH()
         elRow.addView(arrowBtn("◀") { ci = (ci - 1 + COLOR_ELEMENTS.size) % COLOR_ELEMENTS.size; elRefresh() })
@@ -556,7 +571,7 @@ class MainActivity : Activity() {
         elRow.addView(arrowBtn("▶") { ci = (ci + 1) % COLOR_ELEMENTS.size; elRefresh() })
         elRow.addView(preview)
         elRow.addView(Button(this).apply {
-            text = "⟲ padrão"; isAllCaps = false; textSize = 12f; setTextColor(Color.parseColor("#c9f2f4"))
+            text = "⟲ padrão"; isAllCaps = false; textSize = 12f; setTextColor(Color.parseColor("#F2EDEB"))
             background = pill(Color.parseColor("#33ffffff")); setPadding(dp(10), dp(2), dp(10), dp(2))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(12) }
             setOnClickListener { Theme.reset(); elRefresh(); view.postInvalidate() }
@@ -568,7 +583,7 @@ class MainActivity : Activity() {
         val names = arrayOf("R", "G", "B")
         for (k in 0..2) {
             val r = rowH()
-            r.addView(TextView(this).apply { text = names[k]; setTextColor(Color.parseColor("#c9f2f4")); width = dp(22) })
+            r.addView(TextView(this).apply { text = names[k]; setTextColor(Color.parseColor("#F2EDEB")); width = dp(22) })
             val sb = SeekBar(this).apply {
                 max = 255
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -590,7 +605,7 @@ class MainActivity : Activity() {
     }
 
     private fun smallBtn(label: String, onClick: () -> Unit) = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 12.5f; setTextColor(Color.parseColor("#c9f2f4"))
+        text = label; isAllCaps = false; textSize = 12.5f; setTextColor(Color.parseColor("#F2EDEB"))
         background = pill(Color.parseColor("#33ffffff")); setPadding(dp(11), dp(2), dp(11), dp(2))
         minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
         layoutParams = LinearLayout.LayoutParams(
@@ -603,7 +618,7 @@ class MainActivity : Activity() {
     private fun buildLayoutTab(): View {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val row = rowH()
-        val label = TextView(this).apply { setTextColor(Color.parseColor("#eaf4ff")); textSize = 16f; gravity = Gravity.CENTER; minWidth = dp(260) }
+        val label = TextView(this).apply { setTextColor(Color.parseColor("#F2EDEB")); textSize = 16f; gravity = Gravity.CENTER; minWidth = dp(260) }
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
         lateinit var refresh: () -> Unit
         fun rebuildButtons() {
@@ -669,9 +684,9 @@ class MainActivity : Activity() {
     private fun buildEditBar(lay: CustomStore.CLayout) {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#ee0a141d")); setPadding(dp(10), dp(6), dp(10), dp(8)); elevation = dp(12).toFloat()
+            setBackgroundColor(Color.parseColor("#ee0D0A0A")); setPadding(dp(10), dp(6), dp(10), dp(8)); elevation = dp(12).toFloat()
         }
-        bar.addView(TextView(this).apply { text = "✎ ${lay.name}"; setTextColor(Color.parseColor("#eaf4ff")); textSize = 14f; setPadding(0, 0, dp(10), 0) })
+        bar.addView(TextView(this).apply { text = "✎ ${lay.name}"; setTextColor(Color.parseColor("#F2EDEB")); textSize = 14f; setPadding(0, 0, dp(10), 0) })
         val tools = rowH()
         tools.addView(smallBtn("＋ Adicionar") { addWidgetDialog() })
         tools.addView(smallBtn("🗑 Apagar") { editOverlay?.delSel() })
@@ -706,7 +721,7 @@ class MainActivity : Activity() {
         var widgets: MutableList<Widget> = mutableListOf()
         var sel = -1
         var snap = true
-        private val pOut = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.parseColor("#8049c0e1") }
+        private val pOut = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.parseColor("#80E23C3C") }
         private val pSel = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 4f; color = Color.parseColor("#2dc06e"); pathEffect = DashPathEffect(floatArrayOf(16f, 10f), 0f) }
         private val pH = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2dc06e") }
         private var mode = 0
