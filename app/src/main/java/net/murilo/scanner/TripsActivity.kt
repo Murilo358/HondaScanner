@@ -40,14 +40,34 @@ object TripNames {
  *  Total da semana no rodapé. */
 class TripsActivity : Activity() {
     private val h = Handler(Looper.getMainLooper())
-    private val refresher = object : Runnable { override fun run() { render(); h.postDelayed(this, 2000) } }
+    private var wasActive = false
+    private var liveTimer: android.widget.TextView? = null
+    private var livePts: android.widget.TextView? = null
+    private var liveStart = 0L
 
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); Theme.init(this); render() }
-    override fun onResume() { super.onResume(); h.post(refresher) }
+    // Só o cartão "Gravando agora" é atualizado no lugar; reconstruir a tela inteira a cada
+    // 2 s engolia o toque nos cartões (a view morria debaixo do dedo).
+    private val refresher = object : Runnable {
+        override fun run() {
+            val a = TripLogger.active
+            if (a != wasActive) render()
+            else if (a) {
+                val el = (System.currentTimeMillis() - liveStart) / 1000
+                liveTimer?.text = "%d:%02d".format(el / 60, el % 60)
+                livePts?.text = "começou ${hhmm(liveStart)} · ${TripLogger.samples} pontos"
+            }
+            h.postDelayed(this, 2000)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); Theme.init(this) }
+    override fun onResume() { super.onResume(); render(); h.post(refresher) }
     override fun onPause() { super.onPause(); h.removeCallbacks(refresher) }
 
     private fun render() {
         val c = this
+        wasActive = TripLogger.active
+        liveTimer = null; livePts = null
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG)
             setPadding(dp(16), dp(14), dp(16), dp(10))
@@ -56,10 +76,10 @@ class TripsActivity : Activity() {
 
         val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(10), 0, dp(16)) }
 
-        // sessão em andamento (viva)
+        // sessão em andamento (viva) — o refresher atualiza estes textos no lugar
         if (TripLogger.active) {
-            val startMs = TripLogger.currentFile?.let { startOf(it) } ?: System.currentTimeMillis()
-            val el = (System.currentTimeMillis() - startMs) / 1000
+            liveStart = TripLogger.currentFile?.let { startOf(it) } ?: System.currentTimeMillis()
+            val el = (System.currentTimeMillis() - liveStart) / 1000
             val live = Ui.card(c, vertical = false)
             live.addView(View(c).apply {
                 background = Ui.rounded(Ui.ACCENT, dp(5).toFloat())
@@ -67,9 +87,11 @@ class TripsActivity : Activity() {
             })
             val texts = vcol()
             texts.addView(Ui.text(c, "Gravando agora", 14f, Ui.TEXT, bold = true))
-            texts.addView(Ui.text(c, "começou ${hhmm(startMs)} · ${TripLogger.samples} pontos", 12f, Ui.MUTED))
+            livePts = Ui.text(c, "começou ${hhmm(liveStart)} · ${TripLogger.samples} pontos", 12f, Ui.MUTED)
+            texts.addView(livePts)
             live.addView(texts)
-            live.addView(Ui.text(c, "%d:%02d".format(el / 60, el % 60), 17f, Ui.TEXT, bold = true))
+            liveTimer = Ui.text(c, "%d:%02d".format(el / 60, el % 60), 17f, Ui.TEXT, bold = true)
+            live.addView(liveTimer)
             col.addView(live, cardLp())
         }
 
@@ -165,18 +187,23 @@ class TripsActivity : Activity() {
     }
 
     private fun shareTrip(t: Trip) {
-        try {
-            val bmp = TripImage.render(this, t)
-            val dir = File(cacheDir, "shared"); dir.mkdirs()
-            val f = File(dir, "viagem.png")
-            java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }, "Compartilhar viagem"))
-        } catch (_: Exception) {
-            android.widget.Toast.makeText(this, "Falha ao gerar imagem", android.widget.Toast.LENGTH_SHORT).show()
-        }
+        android.widget.Toast.makeText(this, "Gerando imagem…", android.widget.Toast.LENGTH_SHORT).show()
+        Thread {   // baixa tiles do mapa: fora da UI
+            try {
+                val bmp = TripImage.render(this, t)
+                val dir = File(cacheDir, "shared"); dir.mkdirs()
+                val f = File(dir, "viagem.png")
+                java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+                runOnUiThread {
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, "Compartilhar viagem"))
+                }
+            } catch (_: Exception) {
+                runOnUiThread { android.widget.Toast.makeText(this, "Falha ao gerar imagem", android.widget.Toast.LENGTH_SHORT).show() }
+            }
+        }.start()
     }
 
     // --- helpers ---

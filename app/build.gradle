@@ -9,8 +9,8 @@ android {
         applicationId 'net.murilo.scanner'
         minSdk 23
         targetSdk 34
-        versionCode 37
-        versionName '0.37'
+        versionCode 38
+        versionName '0.38'
         vectorDrawables { useSupportLibrary true }
     }
     // keystore fixa do projeto (se presente): builds locais e do CI saem com a MESMA assinatura,

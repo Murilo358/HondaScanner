@@ -7,17 +7,28 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.MapTileProviderBasic
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.Projection
+import org.osmdroid.views.drawing.MapSnapshot
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.cos
 import kotlin.math.min
 
-/** Gera um CARTÃO (imagem PNG) da viagem p/ compartilhar: trajeto + números. Mesma linguagem do painel. */
+/** Gera um CARTÃO (imagem PNG) da viagem p/ compartilhar: mapa de rua (OSM) com o trajeto + números.
+ *  Baixa tiles da internet — chamar FORA da thread de UI. Sem internet, cai no traçado simples. */
 object TripImage {
     private const val BG = "#0A141D"
     private const val PANEL = "#0F1C27"
-    private const val RING = "#2B82D8"
+    private const val ROUTE = "#E23C3C"
     private const val CYAN = "#C9F2F4"
     private const val DIM = "#8FB8C8"
 
@@ -43,11 +54,8 @@ object TripImage {
             logo?.draw(c)
         } catch (_: Exception) {}
 
-        // ---- mapa do trajeto (painel) ----
-        val mapTop = 210f; val mapBot = 1000f
-        val panel = RectF(40f, mapTop, wf - 40f, mapBot)
-        p.color = Color.parseColor(PANEL); c.drawRoundRect(panel, 28f, 28f, p)
-        drawRoute(c, panel, trip, p)
+        // ---- mapa do trajeto ----
+        drawRouteCard(ctx, c, RectF(40f, 210f, wf - 40f, 1000f), trip, p)
 
         // ---- números ----
         val dur = fmtDur(trip.durationMs)
@@ -78,33 +86,91 @@ object TripImage {
         return bmp
     }
 
-    /** Desenha a polyline do GPS dentro do retângulo dado (mesma projeção do TripReplayView). */
-    private fun drawRoute(c: Canvas, r: RectF, trip: Trip, p: Paint) {
-        val pts = trip.samples.filter { it.lat != 0.0 || it.lon != 0.0 }
+    /** Painel do trajeto: mapa de rua quando os tiles vêm; senão o traçado simples. */
+    private fun drawRouteCard(ctx: Context, c: Canvas, r: RectF, trip: Trip, p: Paint) {
+        p.style = Paint.Style.FILL
+        p.color = Color.parseColor(PANEL); c.drawRoundRect(r, 28f, 28f, p)
+        val pts = trip.route
         if (pts.size < 2) {
             p.color = Color.parseColor(DIM); p.textSize = 42f; p.textAlign = Paint.Align.CENTER
             c.drawText("Sem GPS nesta viagem", r.centerX(), r.centerY(), p)
             return
         }
-        var minLa = 90.0; var maxLa = -90.0; var minLo = 180.0; var maxLo = -180.0
-        for (s in pts) { minLa = minOf(minLa, s.lat); maxLa = maxOf(maxLa, s.lat); minLo = minOf(minLo, s.lon); maxLo = maxOf(maxLo, s.lon) }
-        val midLa = (minLa + maxLa) / 2; val midLo = (minLo + maxLo) / 2
-        val kx = cos(Math.toRadians(midLa))
-        val xRange = ((maxLo - minLo) * kx).coerceAtLeast(1e-6)
-        val yRange = (maxLa - minLa).coerceAtLeast(1e-6)
-        val pad = 60f
-        val scale = min((r.width() - 2 * pad) / xRange, (r.height() - 2 * pad) / yRange)
-        fun px(lo: Double) = (r.centerX() + ((lo - midLo) * kx * scale)).toFloat()
-        fun py(la: Double) = (r.centerY() - ((la - midLa) * scale)).toFloat()
+        val clip = Path().apply { addRoundRect(r, 28f, 28f, Path.Direction.CW) }
+        c.save(); c.clipPath(clip)
+        val snap = mapSnapshot(ctx, r.width().toInt(), r.height().toInt(), pts)
+        if (snap != null) {
+            val (mapBmp, proj) = snap
+            c.drawBitmap(mapBmp, r.left, r.top, null)
+            drawPolyline(c, pts, p, casing = true) { la, lo ->
+                val pt = proj.toPixels(GeoPoint(la, lo), null)
+                floatArrayOf(r.left + pt.x, r.top + pt.y)
+            }
+        } else {
+            // offline/tiles indisponíveis: projeção plana sobre o painel escuro
+            var minLa = 90.0; var maxLa = -90.0; var minLo = 180.0; var maxLo = -180.0
+            for (s in pts) { minLa = minOf(minLa, s.lat); maxLa = maxOf(maxLa, s.lat); minLo = minOf(minLo, s.lon); maxLo = maxOf(maxLo, s.lon) }
+            val midLa = (minLa + maxLa) / 2; val midLo = (minLo + maxLo) / 2
+            val kx = cos(Math.toRadians(midLa))
+            val xRange = ((maxLo - minLo) * kx).coerceAtLeast(1e-6)
+            val yRange = (maxLa - minLa).coerceAtLeast(1e-6)
+            val pad = 60f
+            val scale = min((r.width() - 2 * pad) / xRange, (r.height() - 2 * pad) / yRange)
+            drawPolyline(c, pts, p, casing = false) { la, lo ->
+                floatArrayOf(
+                    (r.centerX() + ((lo - midLo) * kx * scale)).toFloat(),
+                    (r.centerY() - ((la - midLa) * scale)).toFloat()
+                )
+            }
+        }
+        c.restore()
+    }
 
-        p.style = Paint.Style.STROKE; p.strokeWidth = 12f; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
-        p.color = Color.parseColor(RING)
-        val path = Path(); path.moveTo(px(pts[0].lon), py(pts[0].lat))
-        for (i in 1 until pts.size) path.lineTo(px(pts[i].lon), py(pts[i].lat))
-        c.drawPath(path, p)
+    private inline fun drawPolyline(c: Canvas, pts: List<TripSample>, p: Paint,
+                                    casing: Boolean, px: (Double, Double) -> FloatArray) {
+        val path = Path()
+        val first = px(pts[0].lat, pts[0].lon); path.moveTo(first[0], first[1])
+        for (i in 1 until pts.size) { val q = px(pts[i].lat, pts[i].lon); path.lineTo(q[0], q[1]) }
+        p.style = Paint.Style.STROKE; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+        if (casing) { p.strokeWidth = 18f; p.color = Color.WHITE; c.drawPath(path, p) }  // contorno p/ ler no mapa claro
+        p.strokeWidth = 11f; p.color = Color.parseColor(ROUTE); c.drawPath(path, p)
         p.style = Paint.Style.FILL
-        p.color = Color.parseColor("#2DC06E"); c.drawCircle(px(pts.first().lon), py(pts.first().lat), 18f, p)
-        p.color = Color.parseColor("#E23C3C"); c.drawCircle(px(pts.last().lon), py(pts.last().lat), 18f, p)
+        val a = px(pts.first().lat, pts.first().lon); val b = px(pts.last().lat, pts.last().lon)
+        p.color = Color.WHITE; c.drawCircle(a[0], a[1], 21f, p); c.drawCircle(b[0], b[1], 21f, p)
+        p.color = Color.parseColor("#2DC06E"); c.drawCircle(a[0], a[1], 15f, p)
+        p.color = Color.parseColor("#E23C3C"); c.drawCircle(b[0], b[1], 15f, p)
+    }
+
+    /** Tiles do OSM renderizados no tamanho do painel (bloqueia até ~12 s); null se não vierem. */
+    private fun mapSnapshot(ctx: Context, w: Int, h: Int, pts: List<TripSample>): Pair<Bitmap, Projection>? {
+        var provider: MapTileProviderBasic? = null
+        return try {
+            Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+            Configuration.getInstance().userAgentValue = ctx.packageName
+            val bbox = BoundingBox.fromGeoPoints(pts.map { GeoPoint(it.lat, it.lon) })
+            var zoom = MapView.getTileSystem().getBoundingBoxZoom(bbox, w - 110, h - 110)
+            if (zoom.isNaN() || zoom <= 0) zoom = 16.0
+            zoom = zoom.coerceIn(3.0, 18.0)
+            val proj = Projection(zoom, w, h, GeoPoint(bbox.centerLatitude, bbox.centerLongitude),
+                0f, true, true, 0, 0)
+            val prov = MapTileProviderBasic(ctx, TileSourceFactory.MAPNIK)
+            provider = prov
+            var out: Bitmap? = null
+            val done = CountDownLatch(1)
+            val snap = MapSnapshot(MapSnapshot.MapSnapshotable { s ->
+                if (s.status == MapSnapshot.Status.CANVAS_OK) {
+                    out = s.bitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                    done.countDown()
+                }
+            }, MapSnapshot.INCLUDE_FLAG_UPTODATE, prov, emptyList(), proj)
+            Thread(snap).start()
+            done.await(12, TimeUnit.SECONDS)
+            out?.let { it to proj }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            try { provider?.detach() } catch (_: Exception) {}
+        }
     }
 
     private fun fmtDur(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }

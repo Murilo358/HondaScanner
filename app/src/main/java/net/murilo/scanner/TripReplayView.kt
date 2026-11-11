@@ -20,7 +20,7 @@ class TripReplayView(context: Context) : View(context) {
     override fun onDraw(c: Canvas) {
         c.drawColor(Color.parseColor("#0A141D"))
         val t = trip ?: return
-        val pts = t.samples.filter { it.lat != 0.0 || it.lon != 0.0 }
+        val pts = t.route
         val w = width.toFloat(); val h = height.toFloat(); val pad = min(w, h) * 0.08f
         if (pts.size < 2) {
             p.color = Color.parseColor("#8FB8C8"); p.textSize = min(w, h) * 0.05f; p.textAlign = Paint.Align.CENTER
