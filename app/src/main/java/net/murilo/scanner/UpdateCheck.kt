@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
-import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -15,7 +14,7 @@ import java.net.URL
  * e, se houver mais nova, baixa o APK do release e abre o instalador do sistema.
  */
 object UpdateCheck {
-    private const val LATEST = "https://api.github.com/repos/Murilo358/HondaScanner/releases/latest"
+    private const val RELEASES = "https://github.com/Murilo358/HondaScanner/releases"
     private const val PLAY = "com.android.vending"
     private const val KING = "com.example.kinginstaller"
     private const val APK_MIME = "application/vnd.android.package-archive"
@@ -24,27 +23,22 @@ object UpdateCheck {
     fun check(act: Activity, manual: Boolean) {
         Thread {
             try {
-                val conn = URL(LATEST).openConnection() as HttpURLConnection
+                // a última tag vem do REDIRECT de /releases/latest — de propósito SEM a API,
+                // que tem limite de 60 req/h por IP e falhava em rede compartilhada
+                val conn = URL("$RELEASES/latest").openConnection() as HttpURLConnection
                 conn.connectTimeout = 8000; conn.readTimeout = 8000
-                conn.setRequestProperty("Accept", "application/vnd.github+json")
-                val json = JSONObject(conn.inputStream.bufferedReader().readText())
-                val tag = json.optString("tag_name").removePrefix("v")
-                var apkUrl: String? = null
-                val assets = json.optJSONArray("assets")
-                for (i in 0 until (assets?.length() ?: 0)) {
-                    val a = assets!!.getJSONObject(i)
-                    val name = a.optString("name")
-                    // o release tem dois APKs; o do app é o que não é o Instalador
-                    if (name.endsWith(".apk") && !name.contains("Instalador")) {
-                        apkUrl = a.optString("browser_download_url"); break
-                    }
-                }
-                if (tag.isBlank() || apkUrl == null) throw IllegalStateException("release sem APK")
+                conn.instanceFollowRedirects = false
+                val loc = conn.getHeaderField("Location") ?: ""
+                conn.disconnect()
+                val tagV = loc.substringAfterLast("/tag/", "")
+                val tag = tagV.removePrefix("v")
+                if (tag.isBlank()) throw IllegalStateException("sem release")
                 if (!newer(tag, BuildConfig.VERSION_NAME)) {
                     if (manual) act.runOnUiThread { toast(act, "Já está na última versão (v${BuildConfig.VERSION_NAME})") }
                     return@Thread
                 }
-                val url = apkUrl
+                // nome do APK é determinístico (release.yml): Scanner-vX.Y.apk
+                val url = "$RELEASES/download/$tagV/Scanner-$tagV.apk"
                 act.runOnUiThread {
                     if (act.isFinishing) return@runOnUiThread
                     AlertDialog.Builder(act).setTitle("Atualização v$tag disponível")
@@ -107,16 +101,12 @@ object UpdateCheck {
             return
         }
         if (installedViaPlay(act)) {
-            // 12+: instalar direto troca a origem (vira packageinstaller) e o app some do
-            // Android Auto — a menos que "Fontes desconhecidas" esteja ligado no modo
-            // desenvolvedor do Android Auto. Então o usuário escolhe o caminho dele.
-            AlertDialog.Builder(act).setTitle("Como instalar a atualização")
-                .setMessage("Este app está com origem Play (esquema do Android Auto).\n\n" +
-                    "• KingInstaller (Shizuku rodando): mantém a origem Play, como na primeira instalação.\n\n" +
-                    "• Direto: dois toques, mas a origem se perde — o app só continua no Android Auto " +
-                    "se \"Fontes desconhecidas\" estiver ligado no modo desenvolvedor dele.")
-                .setPositiveButton("KingInstaller") { _, _ -> handToKing(act, f, uri, tag) }
-                .setNeutralButton("Direto") { _, _ -> act.startActivity(viewIntent(uri)) }
+            // 12+: instalar direto troca a origem (vira packageinstaller) e o app SOME do
+            // Android Auto — "Fontes desconhecidas" sozinho foi testado e NÃO basta.
+            // Só o KingInstaller+Shizuku preserva; entrega o APK pra ele.
+            AlertDialog.Builder(act).setTitle("Instalar pelo KingInstaller")
+                .setMessage("Neste aparelho a atualização precisa ir pelo KingInstaller (com o Shizuku rodando) para o app continuar no Android Auto, como na primeira instalação.")
+                .setPositiveButton("Abrir") { _, _ -> handToKing(act, f, uri, tag) }
                 .setNegativeButton("Depois", null).show()
             return
         }
