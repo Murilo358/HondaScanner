@@ -43,7 +43,15 @@ class Trip(val file: File, val samples: List<TripSample>) {
             try {
                 f.bufferedReader().useLines { lines ->
                     lines.drop(1).forEach { ln ->
-                        val p = ln.split(",")
+                        var p = ln.split(",")
+                        // Sessões antigas gravadas em pt-BR: o decimal saiu como vírgula e cada linha
+                        // virou 23 campos (lat, lon, bateria, injeção, lambda, vazão e consumo partidos
+                        // em dois). A posição é fixa, então dá pra remontar e não perder o histórico.
+                        if (p.size == 23) {
+                            fun j(a: Int) = p[a] + "." + p[a + 1]
+                            p = listOf(p[0], j(1), j(3), p[5], p[6], p[7], p[8], p[9], p[10], p[11],
+                                j(12), j(14), j(16), j(18), p[20], j(21))
+                        }
                         if (p.size >= 16) {
                             fun fl(i: Int) = p[i].toFloatOrNull() ?: 0f
                             out.add(TripSample(
