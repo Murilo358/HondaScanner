@@ -10,6 +10,8 @@
     <!-- Baixar a base de radares (OpenStreetMap / Overpass) -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Instalar a atualização baixada do Release -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <!-- Android Auto: desenhar na Surface (SurfaceCallback) e usar NavigationTemplate -->
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE"/>

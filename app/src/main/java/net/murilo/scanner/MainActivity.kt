@@ -46,7 +46,7 @@ class MainActivity : Activity() {
     private var recording = false
     private lateinit var ham: Button
     private lateinit var statusChip: TextView
-    private val RETRY_SECS = 6
+    private val RETRY_SECS = 3
     private var countdown = RETRY_SECS
     private var customizer: LinearLayout? = null
     private var menuOverlay: View? = null
@@ -126,6 +126,8 @@ class MainActivity : Activity() {
         GpsProvider.start(this, view.dash)
         if (Build.VERSION.SDK_INT >= 23 && !GpsProvider.hasPerm(this))
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2)
+
+        UpdateCheck.check(this, manual = false)   // avisa se houver release mais novo
 
         // conexão automática (vem ligada): tenta ao abrir e o ticker reata sozinho depois
         if (ScannerConnector.isAutoConnect(this))
@@ -297,11 +299,15 @@ class MainActivity : Activity() {
                 },
                 // central: desconectar e esquecer o scanner (libera o Bluetooth da central p/ o celular)
                 if (NwdSppTransport.present(this) && ScannerConnector.sppMac(this) != null)
-                    Dest("Desconectar scanner", "esquecer") { hideMenu(); forgetNwd() } else null
+                    Dest("Desconectar scanner", "esquecer") { hideMenu(); forgetNwd() } else null,
+                Dest("Buscar atualização", "v${BuildConfig.VERSION_NAME}") { hideMenu(); UpdateCheck.check(this, manual = true) }
             )
             // navegação NÃO fecha o menu: ao voltar da tela, o menu continua onde estava
             1 -> listOf(
-                Dest("Registro do sistema", if (TripLogger.active) "gravando" else "automático") { startActivity(Intent(this, TripsActivity::class.java)) }
+                Dest("Ver sessões gravadas",
+                    (if (TripLogger.active) "gravando · " else "") + "${TripLogger.list(this).size}") {
+                    startActivity(Intent(this, TripsActivity::class.java))
+                }
             )
             2 -> listOf(
                 Dest("Diagnóstico (DTC)", null) { startActivity(Intent(this, DtcActivity::class.java)) },
@@ -425,6 +431,9 @@ class MainActivity : Activity() {
                 b.background = if (idx == i) pill(Color.parseColor("#49c0e0")) else pill(Color.parseColor("#33ffffff"))
             }
             content.removeAllViews()
+            // shift light só aparece em rotação alta: na aba dele, força aceso pra dar pra ver/editar
+            Theme.previewShift = (i == 3)
+            view.postInvalidate()
             content.addView(when (i) {
                 0 -> buildCores()
                 1 -> buildCycle(BgTex.labels, { BgTex.selected }, { BgTex.set(it) })
@@ -471,7 +480,10 @@ class MainActivity : Activity() {
         selectTab(0)
     }
 
-    private fun hideCustomizer() { customizer?.let { root.removeView(it) }; customizer = null }
+    private fun hideCustomizer() {
+        customizer?.let { root.removeView(it) }; customizer = null
+        Theme.previewShift = false; view.postInvalidate()
+    }
 
     /** Aba de ciclo (Fundo / Layout): ◀ nome ▶, aplica na hora. */
     private fun buildCycle(labels: List<String>, get: () -> Int, set: (Int) -> Unit): View {
