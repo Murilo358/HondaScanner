@@ -309,7 +309,14 @@ private class ByteFifo {
     fun fail() = synchronized(lock) { dead = true; lock.notifyAll() }
 
     fun read(dst: ByteArray, off: Int, n: Int): Int = synchronized(lock) {
-        while (r >= w && !dead) lock.wait()
+        // com timeout: SPP "conectada" mas muda (aparelho errado/fora do ar) não pode travar
+        // o loop pra sempre — estoura e o ScannerClient reconecta sozinho
+        val deadline = System.currentTimeMillis() + 8000
+        while (r >= w && !dead) {
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) throw IOException("SPP sem resposta")
+            lock.wait(left)
+        }
         if (r >= w && dead) throw IOException("SPP desconectado")
         val c = minOf(n, w - r)
         System.arraycopy(buf, r, dst, off, c); r += c
