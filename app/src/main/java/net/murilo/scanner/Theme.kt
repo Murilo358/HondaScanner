@@ -36,6 +36,7 @@ object Theme {
     @Volatile var shiftEnabled = true
     @Volatile var menuBg = DEF_MENU_BG
     @Volatile var menuAccent = DEF_MENU_ACCENT
+    @Volatile var previewShift = false   // customizador: força o shift light aceso (não persiste)
 
     private var ctx: Context? = null
 
