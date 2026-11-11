@@ -17,7 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Relatório de saúde (design 8A): anel com a nota, frase que a traduz, fila "resolver primeiro"
+/** Relatório de saúde: anel com a nota, frase que a traduz, fila "resolver primeiro"
  *  com o desconto de cada problema e o atalho para a tela que resolve, sinais vitais numa régua. */
 class ReportActivity : Activity() {
 
@@ -29,7 +29,10 @@ class ReportActivity : Activity() {
         Theme.init(this)
         val c = this
         val d = Shared.dash
-        val dtcs = d?.let { DtcReader.read(it) } ?: emptyList()
+        val live = d != null && d.connected
+        // sem scanner conectado, a nota sai do que ficou gravado: última leitura de DTC + última viagem
+        val dtcs = if (live) DtcReader.read(d!!) else DtcReader.lastSaved(c)?.first ?: emptyList()
+        val lastTrip = if (!live) TripLogger.list(c).firstOrNull { it.length() > 200 }?.let { Trip.load(it) } else null
 
         // mesma régua de pontos de sempre
         var score = 100
@@ -42,14 +45,26 @@ class ReportActivity : Activity() {
                 startActivity(Intent(c, DtcActivity::class.java))
             })
         }
-        if (d != null && d.connected) {
-            if (d.ect > Feat.TEMP_WARN) {
+        if (live) {
+            if (d!!.ect > Feat.TEMP_WARN) {
                 score -= 20
                 issues.add(Issue("Temperatura alta", "${d.ect.toInt()} °C agora · −20 na nota", Ui.NEG, null, null))
             }
             if (d.battery in 1f..Feat.BAT_WARN) {
                 score -= 15
                 issues.add(Issue("Bateria baixa", "%.1f V agora · −15 na nota".format(d.battery), Ui.NEG, null, null))
+            }
+        } else if (lastTrip != null && lastTrip.samples.isNotEmpty()) {
+            if (lastTrip.maxEct > Feat.TEMP_WARN) {
+                score -= 20
+                issues.add(Issue("Temperatura alta na última viagem",
+                    "pico de ${lastTrip.maxEct.toInt()} °C · −20 na nota", Ui.NEG, null, null))
+            }
+            val minBat = lastTrip.samples.filter { it.rpm > 300f }.minOfOrNull { it.battery } ?: 0f
+            if (minBat in 1f..Feat.BAT_WARN) {
+                score -= 15
+                issues.add(Issue("Bateria baixa na última viagem",
+                    "%.1f V com motor ligado · −15 na nota".format(minBat), Ui.NEG, null, null))
             }
         }
         val overdue = Maint.items.filter { Maint.remainingKm(it) < 0f }
@@ -112,16 +127,24 @@ class ReportActivity : Activity() {
             }
         }
 
-        // agora
-        col.addView(Ui.text(c, "Agora", 15f, Ui.TEXT, bold = true).apply { setPadding(dp(2), dp(20), 0, dp(2)) })
+        // sinais vitais: ao vivo quando conectado; senão, o fim da última viagem gravada
+        val lastS = lastTrip?.samples?.lastOrNull()
+        col.addView(Ui.text(c, if (live) "Agora" else "Última viagem", 15f, Ui.TEXT, bold = true).apply {
+            setPadding(dp(2), dp(20), 0, dp(2))
+        })
         val strip = Ui.card(c, vertical = false).apply { setPadding(0, dp(12), 0, dp(12)) }
-        val on = d != null && d.connected
-        strip.addView(stripCell(if (on) "${d!!.ect.toInt()}°" else "—", "água"))
-        strip.addView(stripCell(if (on) "%.1f V".format(d!!.battery) else "—", "bateria"))
-        strip.addView(stripCell(if (on) "%.2f".format(d!!.lambda) else "—", "lambda"))
-        strip.addView(stripCell(if (on) "${d!!.fuelPct.toInt()} %" else "—", "tanque"))
+        fun cell(liveV: String?, pastV: String?, label: String) =
+            strip.addView(stripCell((if (live) liveV else pastV) ?: "—", label))
+        cell(d?.let { "${it.ect.toInt()}°" }, lastS?.let { "${it.ect.toInt()}°" }, "arrefec.")
+        cell(d?.let { "%.1f V".format(it.battery) }, lastS?.let { "%.1f V".format(it.battery) }, "bateria")
+        cell(d?.let { "%.2f".format(it.lambda) }, lastS?.let { "%.2f".format(it.lambda) }, "lambda")
+        cell(if (FuelCalc.everFilled) d?.let { "${it.fuelPct.toInt()} %" } else null,
+            if (FuelCalc.everFilled) lastS?.let { "${it.fuelPct.toInt()} %" } else null, "tanque")
         col.addView(strip, lp(8))
-        if (!on) col.addView(Ui.text(c, "Conecte o scanner para ver os sinais vitais ao vivo.", 12f, Ui.FAINT).apply {
+        if (!live) col.addView(Ui.text(c,
+            if (lastS != null && lastTrip != null)
+                "da última viagem, " + SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(lastTrip.startMs))
+            else "Conecte o scanner para ver os sinais vitais.", 12f, Ui.FAINT).apply {
             setPadding(dp(2), dp(6), 0, 0)
         })
 
@@ -158,7 +181,8 @@ class ReportActivity : Activity() {
         if (d != null && d.connected) {
             append("\nAGORA\n")
             append("  Temp: ${d.ect.toInt()}°C · Bateria: ${"%.1f".format(d.battery)}V · Lambda: ${"%.2f".format(d.lambda)}\n")
-            append("  Combustível: ${d.fuelPct.toInt()}% · ${"%.1f".format(d.economyKmL)} km/L · ${d.autonomyKm.toInt()} km\n")
+            if (FuelCalc.everFilled)
+                append("  Combustível: ${d.fuelPct.toInt()}% · ${"%.1f".format(d.economyKmL)} km/L · ${d.autonomyKm.toInt()} km\n")
         }
         append("\nESTATÍSTICAS (app)\n")
         append("  Rodados: ${Stats.totalKm.toInt()} km · ${"%.1f".format(Stats.engineHours)} h de motor\n")

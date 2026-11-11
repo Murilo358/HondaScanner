@@ -544,8 +544,9 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         stroke.color = cFaceEdge; stroke.strokeWidth = 3f * s; c.drawCircle(cx, cy, 20f * s, stroke)
         fill.color = cNeedle; c.drawCircle(cx, cy, 7f * s, fill)
 
-        // shift light
-        if (shiftRpm != null && value >= shiftRpm && (System.currentTimeMillis() / 60L) % 2L == 0L) {
+        // shift light (previewShift = editando no customizador, acende pra ser visível)
+        if (shiftRpm != null && (value >= shiftRpm || Theme.previewShift) &&
+            (System.currentTimeMillis() / 60L) % 2L == 0L) {
             arc.color = cShift; arc.strokeWidth = 11f * s
             c.drawArc(oval(210f), -225f, 270f, false, arc)
             stroke.color = cShift; stroke.strokeWidth = 10f * s
@@ -582,7 +583,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         // luzes de aviso (centro superior; em pe, espremidas entre o hamburger e o relogio)
         if (Feat.on("tell")) {
             txt.textAlign = Paint.Align.CENTER
-            val lbls = arrayOf("TEMP", "BAT", "MIL")
+            val lbls = arrayOf("TEMP", "BAT", "INJ")
             val lit = booleanArrayOf(d.ect >= Feat.TEMP_WARN, d.battery in 5f..Feat.BAT_WARN, d.mil)
             val bgs = intArrayOf(0xFFD44E63.toInt(), 0xFFFFD600.toInt(), 0xFFFF9100.toInt())
             val fgs = intArrayOf(Color.WHITE, 0xFF06222E.toInt(), 0xFF06222E.toInt())
@@ -647,7 +648,10 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         val lineH = (h * 0.045f).coerceIn(14f * dens, 26f * dens)
         val fs = (h * 0.03f).coerceIn(12f * dens, 22f * dens)
         val econ = if (d.economyKmL > 0f) String.format("%.1f km/L", d.economyKmL) else "-- km/L"
-        val fuelStr = "COMB ${d.fuelPct.toInt()}%  ·  $econ  ·  ${d.autonomyKm.toInt()} km"
+        // antes do primeiro "tanque cheio" o nivel e inventado: mostra -- em vez de um numero
+        val fuelStr = if (FuelCalc.everFilled)
+            "COMB ${d.fuelPct.toInt()}%  ·  $econ  ·  ${d.autonomyKm.toInt()} km"
+        else "COMB --  ·  $econ"
         val (tempStr, tempCol) = tempStatus(d)
         val ecoOn = Feat.on("eco") && d.tps in 1f..35f && d.speed > 15f
 
