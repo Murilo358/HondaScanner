@@ -215,16 +215,21 @@ class DatalogActivity : Activity() {
     }
 
     private fun shareImage() {
-        try {
-            val bmp = TripImage.render(this, trip)
-            val dir = File(cacheDir, "shared"); dir.mkdirs()
-            val f = File(dir, "viagem.png")
-            java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }, "Compartilhar viagem"))
-        } catch (e: Exception) { toast("Falha ao gerar imagem") }
+        toast("Gerando imagem…")
+        Thread {   // baixa tiles do mapa: fora da UI
+            try {
+                val bmp = TripImage.render(this, trip)
+                val dir = File(cacheDir, "shared"); dir.mkdirs()
+                val f = File(dir, "viagem.png")
+                java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+                runOnUiThread {
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, "Compartilhar viagem"))
+                }
+            } catch (e: Exception) { runOnUiThread { toast("Falha ao gerar imagem") } }
+        }.start()
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()

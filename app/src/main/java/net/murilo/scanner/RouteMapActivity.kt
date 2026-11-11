@@ -31,7 +31,7 @@ class RouteMapActivity : Activity() {
         val path = intent.getStringExtra("trip")
         if (path == null) { finish(); return }
         val trip = Trip.load(File(path))
-        val pts = trip.samples.filter { it.lat != 0.0 || it.lon != 0.0 }.map { GeoPoint(it.lat, it.lon) }
+        val pts = trip.route.map { GeoPoint(it.lat, it.lon) }
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0A141D")) }
         root.addView(TextView(this).apply {

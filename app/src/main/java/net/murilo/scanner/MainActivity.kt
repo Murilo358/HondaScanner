@@ -117,7 +117,6 @@ class MainActivity : Activity() {
         Maint.init(this)
         RadarDb.init(this)
         TripLogger.init(this)
-        DemoTrip.seedIfEmpty(this)   // sessão de exemplo p/ visualizar o Registro
         Speaker.init(this)
         BgTex.init(this)
         Layout.init(this)

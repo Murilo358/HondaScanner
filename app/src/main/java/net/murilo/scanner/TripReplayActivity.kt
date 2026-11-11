@@ -58,24 +58,26 @@ class TripReplayActivity : Activity() {
     }
 
     private fun shareImage() {
-        try {
-            val bmp = TripImage.render(this, trip)
-            val dir = File(cacheDir, "shared"); dir.mkdirs()
-            val f = File(dir, "viagem.png")
-            java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-            val i = Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, summaryText())
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        Thread {   // baixa tiles do mapa: fora da UI
+            try {
+                val bmp = TripImage.render(this, trip)
+                val dir = File(cacheDir, "shared"); dir.mkdirs()
+                val f = File(dir, "viagem.png")
+                java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+                val i = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, summaryText())
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runOnUiThread { startActivity(Intent.createChooser(i, "Compartilhar viagem")) }
+            } catch (e: Exception) {
+                // fallback texto se algo falhar
+                val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, summaryText()) }
+                runOnUiThread { startActivity(Intent.createChooser(i, "Compartilhar viagem")) }
             }
-            startActivity(Intent.createChooser(i, "Compartilhar viagem"))
-        } catch (e: Exception) {
-            // fallback texto se algo falhar
-            val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, summaryText()) }
-            startActivity(Intent.createChooser(i, "Compartilhar viagem"))
-        }
+        }.start()
     }
 
     private fun summaryText(): String {

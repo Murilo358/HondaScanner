@@ -18,15 +18,36 @@ class Trip(val file: File, val samples: List<TripSample>) {
     val maxRpm: Float get() = samples.maxOfOrNull { it.rpm } ?: 0f
     val maxSpeed: Float get() = samples.maxOfOrNull { it.speed } ?: 0f
     val maxEct: Float get() = samples.maxOfOrNull { it.ect } ?: 0f
-    val hasGps: Boolean get() = samples.any { it.lat != 0.0 || it.lon != 0.0 }
+    val hasGps: Boolean get() = route.size >= 2
+
+    /**
+     * Pontos de GPS LIMPOS para mapa/imagem/distância. O cru vira "teia de aranha":
+     * parado, o GPS deriva em volta do ponto; e fixes ruins teleportam o carro.
+     * Regras: parado (<3 km/h) não cria ponto novo; salto mais rápido que ~250 km/h
+     * é descartado (até 10 seguidos, depois aceita para ressincronizar).
+     */
+    val route: List<TripSample> by lazy {
+        val out = ArrayList<TripSample>()
+        var last: TripSample? = null
+        var dropped = 0
+        for (s in samples) {
+            if (s.lat == 0.0 && s.lon == 0.0) continue
+            val l = last
+            if (l != null) {
+                val d = haversine(l.lat, l.lon, s.lat, s.lon)
+                val dt = (s.t - l.t) / 1000.0
+                if (s.speed < 3f && d < 150) continue
+                if (dt > 0 && d / dt > 70 && dropped < 10) { dropped++; continue }
+            }
+            dropped = 0
+            out.add(s); last = s
+        }
+        out
+    }
 
     val distanceKm: Float by lazy {
         var d = 0.0; var prev: TripSample? = null
-        for (s in samples) {
-            if (s.lat == 0.0 && s.lon == 0.0) { continue }
-            prev?.let { d += haversine(it.lat, it.lon, s.lat, s.lon) }
-            prev = s
-        }
+        for (s in route) { prev?.let { d += haversine(it.lat, it.lon, s.lat, s.lon) }; prev = s }
         (d / 1000.0).toFloat()
     }
 
