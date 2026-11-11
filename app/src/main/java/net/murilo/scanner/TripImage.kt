@@ -1,5 +1,6 @@
 package net.murilo.scanner
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -20,7 +21,7 @@ object TripImage {
     private const val CYAN = "#C9F2F4"
     private const val DIM = "#8FB8C8"
 
-    fun render(trip: Trip): Bitmap {
+    fun render(ctx: Context, trip: Trip): Bitmap {
         val w = 1080; val h = 1400
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -35,10 +36,12 @@ object TripImage {
         p.isFakeBoldText = false; p.color = Color.parseColor(DIM); p.textSize = 38f
         val d = SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale.getDefault()).format(Date(trip.startMs))
         c.drawText(d, 60f, 165f, p)
-        // aro azul (assinatura visual) no canto
-        p.style = Paint.Style.STROKE; p.strokeWidth = 10f; p.color = Color.parseColor(RING)
-        c.drawArc(RectF(wf - 150f, 55f, wf - 60f, 145f), 130f, 280f, false, p)
-        p.style = Paint.Style.FILL
+        // logo do app (grifo) no canto
+        try {
+            val logo = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.gauge_griffin)
+            logo?.setBounds(w - 185, 40, w - 55, 170)
+            logo?.draw(c)
+        } catch (_: Exception) {}
 
         // ---- mapa do trajeto (painel) ----
         val mapTop = 210f; val mapBot = 1000f
@@ -71,7 +74,7 @@ object TripImage {
 
         // ---- rodapé ----
         p.textAlign = Paint.Align.CENTER; p.color = Color.parseColor(DIM); p.textSize = 28f
-        c.drawText("Scanner  ·  gerado pelo app", wf / 2f, h - 36f, p)
+        c.drawText("Scanner", wf / 2f, h - 36f, p)
         return bmp
     }
 
