@@ -59,7 +59,7 @@ class TripReplayActivity : Activity() {
 
     private fun shareImage() {
         try {
-            val bmp = TripImage.render(trip)
+            val bmp = TripImage.render(this, trip)
             val dir = File(cacheDir, "shared"); dir.mkdirs()
             val f = File(dir, "viagem.png")
             java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }

@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Leitor da sessão no modelo do Hondash: cursor fixo no centro com o gráfico correndo por baixo,
+/** Leitor da sessão: cursor fixo no centro com o gráfico correndo por baixo,
  *  valor grande por canal, e a barra inferior ☰ (canais) · ▶ (reproduzir) · linha do tempo · ⋮ (menu).
  *  Acima da barra, a data/hora exata do ponto e a janela visível. */
 class DatalogActivity : Activity() {
@@ -43,7 +43,7 @@ class DatalogActivity : Activity() {
         listOf(
             Channel("rpm", "Rotação do motor", "rpm", Color.parseColor("#E23C3C"), { it.rpm }, 0f, null),
             Channel("speed", "Velocidade", "km/h", Color.parseColor("#E8EDF1"), { it.speed }, 0f, null),
-            Channel("ect", "Água", "°C", Color.parseColor("#2DC06E"), { it.ect }),
+            Channel("ect", "Arrefecimento", "°C", Color.parseColor("#2DC06E"), { it.ect }),
             Channel("tps", "Acelerador", "%", Color.parseColor("#E0A32E"), { it.tps }, 0f, 100f),
             Channel("map", "MAP", "mBar", Color.parseColor("#4a8ad6"), { it.map }),
             Channel("lambda", "Lambda", "", Color.parseColor("#B388FF"), { it.lambda }, decimals = 2),
@@ -178,7 +178,7 @@ class DatalogActivity : Activity() {
     private fun togglePlay() { if (playing) stopPlay() else { playing = true; playBtn.text = "❚❚"; h.post(playTick) } }
     private fun stopPlay() { playing = false; playBtn.text = "▶" }
 
-    /** ☰ — lista de canais com marcação, como no Hondash. */
+    /** ☰ — lista de canais com marcação. */
     private fun channelDialog() {
         val names = channels.map { if (it.unit.isNotEmpty()) "${it.name}  [${it.unit}]" else it.name }.toTypedArray()
         val checked = channels.map { it.on }.toBooleanArray()
@@ -216,7 +216,7 @@ class DatalogActivity : Activity() {
 
     private fun shareImage() {
         try {
-            val bmp = TripImage.render(trip)
+            val bmp = TripImage.render(this, trip)
             val dir = File(cacheDir, "shared"); dir.mkdirs()
             val f = File(dir, "viagem.png")
             java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }

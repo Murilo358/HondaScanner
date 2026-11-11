@@ -21,7 +21,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-/** Nomes dados pelo usuário às sessões (como o Hondash: a gravação tem nome renomeável). */
+/** Nomes dados pelo usuário às sessões (a gravação tem nome renomeável). */
 object TripNames {
     private const val PREF = "trip_names"
     fun get(ctx: Context, f: File): String? =
@@ -35,9 +35,9 @@ object TripNames {
     }
 }
 
-/** Registro do sistema (design 4A, ações como no Hondash): sessão em andamento primeiro, cartões
- *  agrupados por dia com nome renomeável, e ações explícitas por sessão (abrir, renomear,
- *  compartilhar, apagar). Total da semana no rodapé. */
+/** Registro do sistema: sessão em andamento primeiro, cartões agrupados por dia com nome
+ *  renomeável, e ações explícitas por sessão (abrir, renomear, compartilhar, apagar).
+ *  Total da semana no rodapé. */
 class TripsActivity : Activity() {
     private val h = Handler(Looper.getMainLooper())
     private val refresher = object : Runnable { override fun run() { render(); h.postDelayed(this, 2000) } }
@@ -104,7 +104,7 @@ class TripsActivity : Activity() {
         foot.addView(Ui.text(c, if (weekN > 0) "%.1f km em %d sessõe%s esta semana".format(weekKm, weekN, if (weekN == 1) "" else "s") else "", 12f, Ui.FAINT).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        foot.addView(Ui.text(c, "⋮ renomeia, compartilha e apaga", 12f, Ui.FAINT))
+        foot.addView(Ui.text(c, "⤴ compartilha · ⋮ renomeia e apaga", 12f, Ui.FAINT))
         root.addView(foot)
         setContentView(root)
     }
@@ -129,9 +129,14 @@ class TripsActivity : Activity() {
         card.addView(texts)
         card.addView(Ui.text(c, "%.1f".format(t.distanceKm), 17f, Ui.TEXT, bold = true))
         card.addView(Ui.text(c, " km", 12f, Ui.MUTED))
-        // ações explícitas da sessão (padrão Hondash: nada escondido só em gesto)
+        // ações explícitas da sessão: compartilhar à vista + menu ⋮
+        card.addView(Ui.text(c, "⤴", 19f, Ui.MUTED, bold = true).apply {
+            setPadding(dp(12), dp(6), dp(4), dp(6))
+            contentDescription = "Compartilhar"
+            setOnClickListener { shareTrip(t) }
+        })
         card.addView(Ui.text(c, "⋮", 20f, Ui.MUTED, bold = true).apply {
-            setPadding(dp(14), dp(6), dp(4), dp(6))
+            setPadding(dp(10), dp(6), dp(4), dp(6))
             setOnClickListener { sessionMenu(f, t, start, durStr) }
         })
         return card
@@ -161,7 +166,7 @@ class TripsActivity : Activity() {
 
     private fun shareTrip(t: Trip) {
         try {
-            val bmp = TripImage.render(t)
+            val bmp = TripImage.render(this, t)
             val dir = File(cacheDir, "shared"); dir.mkdirs()
             val f = File(dir, "viagem.png")
             java.io.FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
