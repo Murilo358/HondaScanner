@@ -32,6 +32,7 @@ object DemoTrip {
                     val lambda = 0.95 + sin(i / 10.0) * 0.08
                     lat += 0.00006 * sin(ph * Math.PI * 2); lon += 0.00006 * Math.cos(ph * Math.PI * 2)
                     w.write("%d,%.6f,%.6f,%.0f,%.0f,%d,%.0f,%.0f,%.0f,%.0f,%.1f,%.2f,%.2f,%.2f,%.0f,%.1f".format(
+                        java.util.Locale.US,
                         t, lat, lon, rpm, speed, gear, ect, 32.0, map, tps, 13.8, 2.5 + tps / 30, lambda, speed * 0.3, 70.0, 11.0 + sin(i / 20.0) * 4))
                     w.newLine()
                 }

@@ -3,9 +3,10 @@ package net.murilo.scanner
 import android.content.Context
 import java.io.BufferedWriter
 import java.io.File
+import java.util.Locale
 
 /**
- * Registro AUTOMÁTICO do sistema (como a Hondash): grava ~5 amostras/s com TODOS os sensores + GPS,
+ * Registro AUTOMÁTICO do sistema: grava ~5 amostras/s com TODOS os sensores + GPS,
  * sem precisar "iniciar". Liga sozinho quando chegam dados do carro e encerra a sessão quando some.
  * Cada sessão é um CSV em filesDir/trips/. Sessões curtíssimas (ruído) são descartadas.
  */
@@ -55,9 +56,10 @@ object TripLogger {
 
     private fun writeSample(now: Long, d: Dash) {
         try {
+            // Locale.US obrigatório: em pt-BR o decimal vira vírgula e quebra o CSV
             writer?.write(
                 "%d,%.6f,%.6f,%.0f,%.0f,%d,%.0f,%.0f,%.0f,%.0f,%.1f,%.2f,%.2f,%.2f,%.0f,%.1f".format(
-                    now, d.gpsLat, d.gpsLon, d.rpm, d.speed, d.gear, d.ect, d.iat, d.map, d.tps,
+                    Locale.US, now, d.gpsLat, d.gpsLon, d.rpm, d.speed, d.gear, d.ect, d.iat, d.map, d.tps,
                     d.battery, d.injDur, d.lambda, d.fuelFlowLh, d.fuelPct, d.economyKmL
                 )
             )
