@@ -89,9 +89,8 @@ class Dash {
 }
 
 /**
- * Mapeamento byte -> sensor -> escala. Formulas CONFERIDAS (2026-10-21) contra valores
- * reais, usando o log de motor ligado e o repo andgarriv/Honda-ECU-Data (mesmo
- * protocolo).
+ * Mapeamento byte -> sensor -> escala. Formulas conferidas contra log real de motor ligado
+ * e o repo andgarriv/Honda-ECU-Data (mesmo protocolo).
  * Convencao: bloco 0xNN, offset k  ==  RAM 0xNN+k. 16-bit desta ECU e BIG-ENDIAN.
  * Este e o unico lugar que precisa mudar para ajustar escalas.
  */

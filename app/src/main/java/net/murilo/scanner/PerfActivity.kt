@@ -16,7 +16,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Desempenho (design 7A): estado "pronto" com a instrução na tela, velocidade ao vivo grande,
+/** Desempenho: estado "pronto" com a instrução na tela, velocidade ao vivo grande,
  *  recordes com data, massa do carro, zerar pequeno e longe. */
 class PerfActivity : Activity() {
     private val h = Handler(Looper.getMainLooper())

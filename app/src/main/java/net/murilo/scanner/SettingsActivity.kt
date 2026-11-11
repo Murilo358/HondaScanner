@@ -13,7 +13,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 
-/** Ajustes (design 10A): "Tanque cheio" (o gesto mais frequente) no topo como única ação primária;
+/** Ajustes: "Tanque cheio" (o gesto mais frequente) no topo como única ação primária;
  *  steppers de −/+ com os limites escritos sob o rótulo; toque no número para digitar. */
 class SettingsActivity : Activity() {
     private lateinit var container: LinearLayout
