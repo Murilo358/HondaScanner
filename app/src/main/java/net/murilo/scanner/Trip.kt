@@ -23,27 +23,31 @@ class Trip(val file: File, val samples: List<TripSample>) {
     /**
      * Pontos de GPS LIMPOS para mapa/imagem/distância. O cru vira "teia de aranha":
      * parado, o GPS deriva em volta do ponto; e fixes ruins teleportam o carro.
-     * Regras: parado (<3 km/h) não cria ponto novo; e o fix só é aceito se couber no
-     * ORÇAMENTO de distância do carro — velocidade do OBD × tempo × 1.5 + 12 m de erro
-     * de GPS. Validado em simulação (teia a 10 km/h: p95 de 13 m; rodovia/serra: 100%
-     * mantido; túnel: ressincroniza direto, o orçamento cresce com o gap).
+     * Regras: parado (<3 km/h) não cria ponto novo; fix só entra se couber no ORÇAMENTO
+     * de distância do carro — velocidade do OBD × tempo × 1.5 + 12 m de erro de GPS;
+     * e um fix FORA do orçamento (salto) só é aceito se os 5 fixes seguintes confirmarem
+     * o lugar novo (todos a <100 m um do outro) — túnel/garagem ressincroniza em ~1 s,
+     * fix podre isolado ou espalhado nunca entra (antes, 2 s de lixo já "realocava").
      */
     val route: List<TripSample> by lazy {
         val out = ArrayList<TripSample>()
         var last: TripSample? = null
-        var dropped = 0
+        var pend: TripSample? = null   // candidato de realocação (salto a confirmar)
+        var pendN = 0
         for (s in samples) {
             if (s.lat == 0.0 && s.lon == 0.0) continue
             val l = last
-            if (l != null) {
-                val d = haversine(l.lat, l.lon, s.lat, s.lon)
-                val dt = (s.t - l.t) / 1000.0
-                if (s.speed < 3f && d < 150) continue
-                val budget = maxOf(s.speed, l.speed) / 3.6 * dt * 1.5 + 12.0
-                if (dt > 0 && d > budget && dropped < 10) { dropped++; continue }
-            }
-            dropped = 0
-            out.add(s); last = s
+            if (l == null) { out.add(s); last = s; continue }
+            val d = haversine(l.lat, l.lon, s.lat, s.lon)
+            val dt = (s.t - l.t) / 1000.0
+            if (s.speed < 3f && d < 150) continue
+            val budget = maxOf(s.speed, l.speed) / 3.6 * dt * 1.5 + 12.0
+            if (dt <= 0 || d <= budget) { out.add(s); last = s; pend = null; pendN = 0; continue }
+            val p = pend
+            if (p != null && haversine(p.lat, p.lon, s.lat, s.lon) < 100.0) {
+                pendN++
+                if (pendN >= 5) { out.add(s); last = s; pend = null; pendN = 0 } else pend = s
+            } else { pend = s; pendN = 1 }
         }
         out
     }

@@ -29,7 +29,7 @@ object TripLogger {
     fun init(ctx: Context) { appCtx = ctx.applicationContext }
     fun dir(ctx: Context): File = File(ctx.filesDir, "trips").apply { mkdirs() }
 
-    private fun hasData(d: Dash) = d.connected || d.rpm > 50f   // scanner conectado ou simulador rodando
+    private fun hasData(d: Dash) = d.connected   // só dados REAIS: simulação não vira registro
 
     /** Chamado a cada ciclo do painel. Decide sozinho quando gravar. */
     fun tick(d: Dash) {

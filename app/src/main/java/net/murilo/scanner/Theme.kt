@@ -40,6 +40,7 @@ object Theme {
     @Volatile var menuBg = DEF_MENU_BG
     @Volatile var menuAccent = DEF_MENU_ACCENT
     @Volatile var previewShift = false   // customizador: força o shift light aceso (não persiste)
+    @Volatile var editKey: String? = null   // customizador: elemento em edição pisca no painel (não persiste)
 
     private var ctx: Context? = null
 

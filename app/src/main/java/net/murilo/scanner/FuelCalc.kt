@@ -60,13 +60,16 @@ object FuelCalc {
         d.fuelFlowLh = lh
         d.economyKmL = if (lh > 0.05f && d.speed > 1f) (d.speed / lh) else 0f
 
-        val usedL = (lh * dtH).toFloat()
-        if (usedL in 0f..0.05f) { consumedL += usedL; d.tripFuelL += usedL }
+        // simulação mostra vazão/economia ao vivo, mas NÃO gasta o tanque real nem entra na média
+        if (d.connected) {
+            val usedL = (lh * dtH).toFloat()
+            if (usedL in 0f..0.05f) { consumedL += usedL; d.tripFuelL += usedL }
+            if (d.economyKmL in 1f..40f)
+                avgEcon = if (avgEcon <= 0f) d.economyKmL else avgEcon * 0.995f + d.economyKmL * 0.005f
+        }
 
         d.fuelLevelL = (tankL - consumedL).coerceIn(0f, tankL)
         d.fuelPct = (d.fuelLevelL / tankL * 100f).coerceIn(0f, 100f)
-        if (d.economyKmL in 1f..40f)
-            avgEcon = if (avgEcon <= 0f) d.economyKmL else avgEcon * 0.995f + d.economyKmL * 0.005f
         d.autonomyKm = d.fuelLevelL * (if (avgEcon > 0f) avgEcon else 10f)
 
         if ((now / 1_000_000_000L) % 10L == 0L) save()

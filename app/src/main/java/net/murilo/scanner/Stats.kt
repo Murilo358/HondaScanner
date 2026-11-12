@@ -35,6 +35,8 @@ object Stats {
     }
 
     fun tick(d: Dash) {
+        // simulação não soma km/horas nem bate máximos vitalícios
+        if (!d.connected) { lastT = 0L; prevVtec = false; prevRedline = false; return }
         val now = System.currentTimeMillis()
         if (lastT != 0L) {
             val dtH = (now - lastT) / 3_600_000.0
