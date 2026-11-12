@@ -61,11 +61,12 @@ class DatalogActivity : Activity() {
         tripPath = intent.getStringExtra("trip") ?: ""
         if (tripPath.isEmpty()) { finish(); return }
         val f = File(tripPath)
-        if (Trip.cached(f)) { trip = Trip.of(f); buildUi(); return }
-        // CSV grande: parse fora da UI (travava a tela ao abrir a sessão)
+        // loading SEMPRE (mesmo com o CSV em cache): rota/distância e o primeiro desenho de uma
+        // viagem longa travam a tela um instante — sem isso o clique parecia morto
         setContentView(Ui.loading(this, "Carregando sessão…"))
         Thread {
             val t = Trip.of(f)
+            t.distanceKm   // força os lazies pesados (rota limpa + distância) fora da UI
             runOnUiThread { if (!isFinishing) { trip = t; buildUi() } }
         }.start()
     }

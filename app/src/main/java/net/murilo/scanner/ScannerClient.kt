@@ -26,6 +26,7 @@ class ScannerClient(
 
     @Volatile var logFile: File? = null   // se != null, grava cada bloco
     @Volatile var clearDtcRequested = false   // setar p/ enviar o comando de limpar DTC no proximo ciclo
+    @Volatile private var lastOkMs = 0L       // último bloco VÁLIDO da ECU (vigiado pelo watchdog)
 
     fun start() {
         if (running) return
@@ -45,9 +46,26 @@ class ScannerClient(
             try {
                 status("Conectando…")
                 val (input, output) = transport.open()
-                dash.connected = true
-                status("Conectado")
+                // connected só no 1º bloco válido (ver poll): socket aberto não é "falando com o carro"
+                status("Aguardando o carro…")
                 drain(input, 300)
+                // Vigia: com o carro desligado o scanner (alimentado direto da bateria) mantém o
+                // socket vivo mas a ECU cala — o read bloqueia PRA SEMPRE, sem exceção: o status
+                // congela em conectado e o registro nunca fecha. 8s sem bloco válido => fecha o
+                // transporte, o read estoura e o loop reconecta normalmente.
+                lastOkMs = System.currentTimeMillis()
+                val dog = Thread({
+                    try {
+                        while (running) {
+                            Thread.sleep(1000)
+                            if (System.currentTimeMillis() - lastOkMs > 8000) {
+                                try { transport.close() } catch (_: Exception) {}
+                                break
+                            }
+                        }
+                    } catch (_: InterruptedException) {}
+                }, "ScannerDog").apply { isDaemon = true; start() }
+                try {
 
                 // Prioriza 0x00 (RPM+velocidade) e redesenha a cada leitura -> sem lag.
                 // 0x10/0x20 (dados vivos) alternados; blocos quase estaticos bem espacados.
@@ -71,6 +89,7 @@ class ScannerClient(
                     n++
                     dash.pushHistory()
                 }
+                } finally { dog.interrupt() }
             } catch (e: Exception) {
                 Log.w(TAG, "erro", e)
                 if (running) status("Reconectando…")
@@ -90,6 +109,8 @@ class ScannerClient(
         val reply = readExact(input, Protocol.totalReplyLen(len)) ?: return
         val data = Protocol.parseReply(cmd, reply, len)
         if (data != null) {
+            lastOkMs = System.currentTimeMillis()
+            if (!dash.connected) { dash.connected = true; status("Conectado") }
             dash.applyBlock(addr, data)
             logFile?.let { appendLog(it, addr, data) }
         } else {

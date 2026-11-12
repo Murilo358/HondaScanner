@@ -103,12 +103,33 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         cShift = Theme.shiftColor
         cFace = Theme.darken(cBg, 0.45f); cFaceEdge = Theme.lighten(cBg, 0.22f)
         cLine = Theme.withAlpha(cText, 42)
-        if (Theme.griffin != lastGriffin) {
-            // branco = arte cinza original (tint neutro); qualquer outra cor tinge por multiplicação
-            bmpPaint.colorFilter = if (Theme.griffin == 0xFFFFFFFF.toInt()) null
-                else PorterDuffColorFilter(Theme.griffin, PorterDuff.Mode.MULTIPLY)
-            lastGriffin = Theme.griffin
+        // elemento em edição no customizador PISCA (cor escolhida ⇄ contraste) pra mostrar onde aplica
+        val ek = Theme.editKey
+        val blink = ek != null && (SystemClock.uptimeMillis() / 450L) % 2L == 0L
+        if (blink) when (ek) {
+            "bg" -> cBg = flash(cBg)
+            "ring" -> cRing = flash(cRing)
+            "progress" -> cProgress = flash(cProgress)
+            "needle" -> cNeedle = flash(cNeedle)
+            "redline" -> cRedline = flash(cRedline)
+            "text" -> cText = flash(cText)
         }
+        val gcol = if (blink && ek == "griffin") flash(Theme.griffin) else Theme.griffin
+        if (gcol != lastGriffin) {
+            // branco = arte cinza original (tint neutro); qualquer outra cor tinge por multiplicação
+            bmpPaint.colorFilter = if (gcol == 0xFFFFFFFF.toInt()) null
+                else PorterDuffColorFilter(gcol, PorterDuff.Mode.MULTIPLY)
+            lastGriffin = gcol
+        }
+    }
+
+    /** Zoom do customizador: o elemento em edição desenha ~30% maior (além de piscar). */
+    private fun emph(key: String) = if (Theme.editKey == key) 1.3f else 1f
+
+    /** Fase "acesa" do pisca: escurece cor clara, clareia cor escura — contraste garantido. */
+    private fun flash(c: Int): Int {
+        val lum = (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
+        return if (lum > 140) Theme.darken(c, 0.5f) else Theme.lighten(c, 0.6f)
     }
 
     fun draw(c: Canvas, w: Int, h: Int, d: Dash) {
@@ -145,9 +166,8 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
         val sel = Layout.selected
         when {
-            // Em pé, todo layout embutido usa o arranjo retrato (os embutidos são deitados por natureza).
-            // Layouts personalizados usam coordenadas normalizadas e seguem o aparelho.
-            h > w && !Layout.isCustom(sel) -> drawAtualPe(c, w, h, d, rpmV, spdV, tmpV)
+            // Cada layout embutido tem arranjo próprio deitado E em pé; os personalizados
+            // usam coordenadas normalizadas e seguem o aparelho.
             sel == 1 -> drawAdapt(c, w, h, d, rpmV, spdV, tmpV)
             sel == 2 -> drawCartoes(c, w, h, d, rpmV, spdV, tmpV)
             sel == 3 -> drawDigital(c, w, h, d, rpmV, spdV, tmpV)
@@ -261,14 +281,50 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         drawOverlays(c, w, h, d, stripH)
     }
 
-    /** Layout 1: adaptativo. Decide pela largura disponivel (split do Android Auto). */
+    /** Altura da faixa de dados: em pé ela vira 2 linhas de 3 colunas (mais alta). */
+    private fun stripHOf(w: Int, h: Int) = if (h > w) (h * 0.17f).coerceIn(96f * dens, 220f * dens)
+        else (h * 0.16f).coerceIn(58f * dens, 160f * dens)
+
+    /** Layout 1: adaptativo. Decide pela proporção da tela (split do AA, deitado, em pé). */
     private fun drawAdapt(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        if (w.toFloat() / h.toFloat() >= 2.1f) threeBig(c, w, h, d, rpmV, spdV, tmpV)
-        else twoPlusBar(c, w, h, d, rpmV, spdV, tmpV)
+        when {
+            w.toFloat() / h.toFloat() >= 2.1f -> threeBig(c, w, h, d, rpmV, spdV, tmpV)
+            h > w -> twoStack(c, w, h, d, rpmV, spdV, tmpV)
+            else -> twoPlusBar(c, w, h, d, rpmV, spdV, tmpV)
+        }
+    }
+
+    /** Adaptativo em pé: velocidade e RPM empilhados + barra de temperatura na direita. */
+    private fun twoStack(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
+        val stripH = stripHOf(w, h)
+        val topPad = h * 0.075f
+        val areaH = h - stripH - topPad - h * 0.11f   // reserva do rodapé (MÁX/combustível empilhados)
+        val tbw = (w * 0.07f).coerceIn(22f * dens, 48f * dens); val tgap = w * 0.03f
+        val availW = w - tbw - tgap * 2f
+        val dia = min(availW * 0.92f, areaH / 2.08f)
+        val cx = tgap + availW / 2f
+        dial(c, cx, topPad + areaH * 0.25f, dia, 0f, 220f, SPD_MAJ, SPD_LBL, "KM/H", spdV.toInt().toString(), spdV, null, gearStr(d))
+        dial(c, cx, topPad + areaH * 0.76f, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "RPM", rpmV.toInt().toString(), rpmV, 7000f, null, shiftOrNull())
+        val barH = areaH * 0.72f
+        tempBar(c, w - tgap - tbw / 2f, topPad + (areaH - barH) / 2f, tbw, barH, tmpV)
+        strip(c, w, h, stripH, d, cols = 3)
+        drawOverlays(c, w, h, d, stripH)
     }
 
     private fun threeBig(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
+        val stripH = stripHOf(w, h)
+        if (h > w) {   // em pé: os 3 empilhados, do tamanho que couber
+            val topPad = h * 0.055f
+            val areaH = h - stripH - topPad - h * 0.10f   // rodapé
+            val dia = min(w * 0.95f, areaH / 3.05f)
+            val cx = w / 2f
+            dial(c, cx, topPad + areaH * (0.5f / 3f), dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "RPM", rpmV.toInt().toString(), rpmV, 7000f, null, shiftOrNull())
+            dial(c, cx, topPad + areaH * (1.5f / 3f), dia, 0f, 220f, SPD_MAJ, SPD_LBL, "KM/H", spdV.toInt().toString(), spdV, null, gearStr(d))
+            dial(c, cx, topPad + areaH * (2.5f / 3f), dia, 40f, 120f, TMP_MAJ, TMP_LBL, "°C", tmpV.toInt().toString(), tmpV, 108f, null)
+            strip(c, w, h, stripH, d, cols = 3)
+            drawOverlays(c, w, h, d, stripH)
+            return
+        }
         val areaH = h - stripH
         val cy = areaH / 2f + h * 0.01f
         val dia = min((w - 16f) / 3.02f, areaH * 1.10f)
@@ -298,17 +354,19 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         drawOverlays(c, w, h, d, stripH)
     }
 
-    /** Layout 2: cartoes quadrados (cada um com um mostrador + grifo). */
+    /** Layout 2: cartoes quadrados (cada um com um mostrador + grifo). Em pé: 3 linhas. */
     private fun drawCartoes(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
-        val topPad = h * 0.03f
-        val gapC = w * 0.012f
-        val cw = (w - 4 * gapC) / 3f
-        val chH = h - stripH - topPad * 2f
-        val top = topPad
+        val portrait = h > w
+        val stripH = stripHOf(w, h)
+        val topPad = h * (if (portrait) 0.065f else 0.03f)
+        val gapC = min(w, h) * 0.012f
+        val cw: Float; val chH: Float
+        if (portrait) { cw = w - 2 * gapC; chH = (h - stripH - topPad - h * 0.11f - 2 * gapC) / 3f }
+        else { cw = (w - 4 * gapC) / 3f; chH = h - stripH - topPad * 2f }
         val labels = arrayOf("RPM", "VELOCIDADE", "MOTOR")
         for (i in 0..2) {
-            val x0 = gapC + i * (cw + gapC)
+            val x0 = if (portrait) gapC else gapC + i * (cw + gapC)
+            val top = if (portrait) topPad + i * (chH + gapC) else topPad
             cardBox(c, x0, top, x0 + cw, top + chH, 18f)
             txt.color = cDim; txt.textSize = (chH * 0.07f).coerceIn(12f * dens, 22f * dens); txt.textAlign = Paint.Align.CENTER
             c.drawText(labels[i], x0 + cw / 2f, top + chH * 0.11f, txt)
@@ -320,44 +378,62 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
                 else -> dial(c, gcx, gcy, dia, 40f, 120f, TMP_MAJ, TMP_LBL, "°C", tmpV.toInt().toString(), tmpV, 108f, null)
             }
         }
-        strip(c, w, h, stripH, d)
+        strip(c, w, h, stripH, d, if (portrait) 3 else 6)
         drawOverlays(c, w, h, d, stripH)
     }
 
     /** Layout 3: digital minimalista (velocidade gigante + barra de RPM + marcha + temp). */
     private fun drawDigital(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
+        val portrait = h > w
+        val stripH = stripHOf(w, h)
         val areaH = h - stripH
         val barH = (h * 0.03f).coerceIn(10f * dens, 22f * dens)
-        hbar(c, w * 0.06f, h * 0.085f, w * 0.88f, barH, rpmV / 8000f, 7000f / 8000f)
+        val barY = h * (if (portrait) 0.115f else 0.085f)   // em pé desce: luzes de aviso em cima
+        hbar(c, w * 0.06f, barY, w * 0.88f, barH, rpmV / 8000f, 7000f / 8000f)
         txtL.color = cDim; txtL.textSize = (h * 0.03f).coerceIn(11f * dens, 18f * dens)
-        c.drawText("RPM ${rpmV.toInt()}", w * 0.06f, h * 0.085f - barH * 0.4f, txtL)
+        c.drawText("RPM ${rpmV.toInt()}", w * 0.06f, barY - barH * 0.4f, txtL)
         txtR.color = cDim; txtR.textSize = (h * 0.03f).coerceIn(11f * dens, 18f * dens)
-        c.drawText("8000", w * 0.94f, h * 0.085f - barH * 0.4f, txtR)
-        val cyC = areaH * 0.52f
-        blitGriffin(c, w * 0.40f, cyC, min(w, h) * 0.33f)
-        val bigSize = (h * 0.46f).coerceAtMost(240f * dens)
+        c.drawText("8000", w * 0.94f, barY - barH * 0.4f, txtR)
+        val cxBig = w * (if (portrait) 0.5f else 0.40f)
+        val cyC = areaH * (if (portrait) 0.42f else 0.52f)
+        blitGriffin(c, cxBig, cyC, min(w, h) * 0.33f)
+        val bigSize = if (portrait) min(w * 0.42f, h * 0.22f) else (h * 0.46f).coerceAtMost(240f * dens)
         txt.color = cText; txt.textAlign = Paint.Align.CENTER; txt.textSize = bigSize
-        c.drawText(spdV.toInt().toString(), w * 0.40f, cyC + bigSize * 0.34f, txt)
+        c.drawText(spdV.toInt().toString(), cxBig, cyC + bigSize * 0.34f, txt)
         txt.color = cUnit; txt.textSize = (h * 0.055f).coerceIn(16f * dens, 34f * dens)
-        c.drawText("KM/H", w * 0.40f, cyC + bigSize * 0.34f + (h * 0.075f).coerceIn(20f * dens, 44f * dens), txt)
-        // marcha chip
-        val chipS = (h * 0.26f).coerceIn(80f * dens, 170f * dens)
-        val chx = w * 0.74f; val chy = cyC
+        c.drawText("KM/H", cxBig, cyC + bigSize * 0.34f + (h * 0.075f).coerceIn(20f * dens, 44f * dens), txt)
+        // marcha chip (em pé: abaixo da velocidade, centralizado)
+        val chipS = ((if (portrait) w * 0.30f else h * 0.26f)).coerceIn(80f * dens, 170f * dens)
+        val chx = w * (if (portrait) 0.5f else 0.74f); val chy = if (portrait) areaH * 0.72f else cyC
         roundRect(c, chx - chipS / 2f, chy - chipS / 2f, chx + chipS / 2f, chy + chipS / 2f, chipS * 0.18f, Theme.lighten(cBg, 0.04f))
         stroke.color = cFaceEdge; stroke.strokeWidth = 2f
         c.drawRoundRect(RectF(chx - chipS / 2f, chy - chipS / 2f, chx + chipS / 2f, chy + chipS / 2f), chipS * 0.18f, chipS * 0.18f, stroke)
         txt.color = cText; txt.textSize = chipS * 0.6f; c.drawText(gearStr(d), chx, chy + chipS * 0.22f, txt)
         txt.color = cDim; txt.textSize = chipS * 0.14f; c.drawText("MARCHA", chx, chy - chipS * 0.28f, txt)
         // temp barra na esquerda
-        val tbw = (w * 0.03f).coerceIn(20f * dens, 42f * dens); val tbH = areaH * 0.6f
+        val tbw = (w * (if (portrait) 0.06f else 0.03f)).coerceIn(20f * dens, 42f * dens)
+        val tbH = areaH * (if (portrait) 0.42f else 0.6f)
         tempBar(c, w * 0.08f, cyC - tbH / 2f, tbw, tbH, tmpV)
-        strip(c, w, h, stripH, d)
+        strip(c, w, h, stripH, d, if (portrait) 3 else 6)
         drawOverlays(c, w, h, d, stripH)
     }
 
-    /** Layout 4: um mostrador grande (anel=RPM, digital=velocidade) + parede de dados. */
+    /** Layout 4: um mostrador grande (anel=RPM, digital=velocidade) + parede de dados.
+     *  Em pé: mostrador em cima, parede embaixo em 2 colunas. */
     private fun drawParede(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
+        if (h > w) {
+            val topPad = h * 0.075f
+            val dia = min(w * 0.84f, h * 0.40f)
+            val cx = w / 2f; val cy = topPad + dia / 2f
+            dial(c, cx, cy, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
+            val wallTop = cy + dia / 2f + h * 0.05f
+            txt.color = cDim; txt.textAlign = Paint.Align.CENTER; txt.textSize = (h * 0.022f).coerceIn(12f * dens, 20f * dens)
+            c.drawText("RPM ${rpmV.toInt()}", cx, wallTop - h * 0.022f, txt)
+            val mp = w * 0.03f
+            dataWall(c, mp, wallTop, w - 2 * mp, h * 0.84f - wallTop, d, cols = 2)
+            drawOverlays(c, w, h, d, 0f)
+            return
+        }
         val m = w * 0.015f
         val dia = min(h * 0.9f, w * 0.44f)
         val cxL = m + dia / 2f; val cyL = h * 0.52f
@@ -369,26 +445,42 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         drawOverlays(c, w, h, d, 0f)
     }
 
-    /** Layout 5: Underground — tacometro central grande + cards laterais (com grifo). */
+    /** Layout 5: Underground — tacometro central grande + cards (laterais; em pé, 2×2 embaixo). */
     private fun drawUnderground(c: Canvas, w: Int, h: Int, d: Dash, rpmV: Float, spdV: Float, tmpV: Float) {
-        val stripH = (h * 0.16f).coerceIn(58f * dens, 160f * dens)
+        val portrait = h > w
+        val stripH = stripHOf(w, h)
         val areaH = h - stripH
-        val cx = w / 2f; val cy = areaH * 0.56f
-        val dia = min(areaH * 0.84f, w * 0.5f)
-        dial(c, cx, cy, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
-        val cardW = (cx - dia / 2f - w * 0.03f).coerceIn(80f * dens, 260f * dens)
         val boost = (d.map - 1013f) / 1000f
-        sideCard(c, w * 0.02f, areaH * 0.26f, cardW, areaH * 0.20f, if (boost >= 0f) "BOOST" else "VÁCUO", "${fmt2(abs(boost))} bar")
-        sideCard(c, w * 0.02f, areaH * 0.52f, cardW, areaH * 0.20f, "TEMP", "${d.ect.toInt()}°C")
-        sideCard(c, w - w * 0.02f - cardW, areaH * 0.26f, cardW, areaH * 0.20f, "LAMBDA", fmt2(d.lambda))
-        sideCard(c, w - w * 0.02f - cardW, areaH * 0.52f, cardW, areaH * 0.20f, "BATERIA", "${fmt1(d.battery)}v")
-        strip(c, w, h, stripH, d)
+        if (portrait) {
+            val topPad = h * 0.075f
+            val dia = min(w * 0.88f, areaH * 0.46f)
+            val cx = w / 2f; val cy = topPad + dia / 2f
+            dial(c, cx, cy, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
+            val gap = w * 0.03f
+            val cardW = (w - 3 * gap) / 2f; val cardH = areaH * 0.095f
+            val y0 = cy + dia / 2f + h * 0.02f
+            sideCard(c, gap, y0, cardW, cardH, if (boost >= 0f) "BOOST" else "VÁCUO", "${fmt2(abs(boost))} bar")
+            sideCard(c, gap * 2 + cardW, y0, cardW, cardH, "TEMP", "${d.ect.toInt()}°C")
+            sideCard(c, gap, y0 + cardH + gap, cardW, cardH, "LAMBDA", fmt2(d.lambda))
+            sideCard(c, gap * 2 + cardW, y0 + cardH + gap, cardW, cardH, "BATERIA", "${fmt1(d.battery)}v")
+        } else {
+            val cx = w / 2f; val cy = areaH * 0.56f
+            val dia = min(areaH * 0.84f, w * 0.5f)
+            dial(c, cx, cy, dia, 0f, 8000f, RPM_MAJ, RPM_LBL, "KM/H", spdV.toInt().toString(), rpmV, 7000f, gearStr(d), shiftOrNull())
+            val cardW = (cx - dia / 2f - w * 0.03f).coerceIn(80f * dens, 260f * dens)
+            sideCard(c, w * 0.02f, areaH * 0.26f, cardW, areaH * 0.20f, if (boost >= 0f) "BOOST" else "VÁCUO", "${fmt2(abs(boost))} bar")
+            sideCard(c, w * 0.02f, areaH * 0.52f, cardW, areaH * 0.20f, "TEMP", "${d.ect.toInt()}°C")
+            sideCard(c, w - w * 0.02f - cardW, areaH * 0.26f, cardW, areaH * 0.20f, "LAMBDA", fmt2(d.lambda))
+            sideCard(c, w - w * 0.02f - cardW, areaH * 0.52f, cardW, areaH * 0.20f, "BATERIA", "${fmt1(d.battery)}v")
+        }
+        strip(c, w, h, stripH, d, if (portrait) 3 else 6)
         drawOverlays(c, w, h, d, stripH)
     }
 
     // --- helpers dos layouts ---
     private fun blitGriffin(c: Canvas, cx: Float, cy: Float, half: Float) {
-        griffin()?.let { c.drawBitmap(it, null, RectF(cx - half, cy - half, cx + half, cy + half), bmpPaint) }
+        val hz = half * emph("griffin")
+        griffin()?.let { c.drawBitmap(it, null, RectF(cx - hz, cy - hz, cx + hz, cy + hz), bmpPaint) }
     }
 
     private fun tempBar(c: Canvas, cx: Float, top: Float, barW: Float, barH: Float, value: Float) {
@@ -432,7 +524,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         txt.color = cText; txt.textSize = (h * 0.40f).coerceIn(15f * dens, 32f * dens); c.drawText(value, x + w / 2f, y + h * 0.80f, txt)
     }
 
-    private fun dataWall(c: Canvas, x: Float, y: Float, w: Float, h: Float, d: Dash) {
+    private fun dataWall(c: Canvas, x: Float, y: Float, w: Float, h: Float, d: Dash, cols: Int = 3) {
         val cells = arrayOf(
             Triple("TEMP", "${d.ect.toInt()}°C", if (d.ect >= Feat.TEMP_WARN) cRedline else cText),
             Triple("BATERIA", "${fmt1(d.battery)}V", cText),
@@ -440,7 +532,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             Triple("LAMBDA", fmt2(d.lambda), cText),
             Triple("INJEÇÃO", "${fmt1(d.injDur)}ms", cText),
             Triple("AVANÇO", "${d.ignAdv.toInt()}°", cText))
-        val cols = 3; val rows = 2; val g = w * 0.02f
+        val rows = (cells.size + cols - 1) / cols; val g = w * 0.02f
         val cw = (w - g * (cols - 1)) / cols; val ch = (h - g * (rows - 1)) / rows
         for (i in cells.indices) {
             val cx0 = x + (i % cols) * (cw + g); val cy0 = y + (i / cols) * (ch + g)
@@ -486,30 +578,33 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         stroke.color = cFaceEdge; stroke.strokeWidth = 3f * s; c.drawCircle(cx, cy, 236f * s, stroke)
 
         // anel base
-        arc.color = cRing; arc.strokeWidth = 11f * s
+        arc.color = cRing; arc.strokeWidth = 11f * s * emph("ring")
         c.drawArc(oval(210f), -225f, 270f, false, arc)
-        // preenchimento que segue o ponteiro (+ glow)
-        val frac = ((value - vmin) / (vmax - vmin)).coerceIn(0f, 1f)
+        // preenchimento que segue o ponteiro (+ glow); editando a cor dele, aparece mesmo parado
+        var frac = ((value - vmin) / (vmax - vmin)).coerceIn(0f, 1f)
+        if (Theme.editKey == "progress") frac = frac.coerceAtLeast(0.55f)
         val nearShift = shiftRpm != null && value >= shiftRpm - 600f
         val progColor = if (nearShift) cShift else cProgress
         if (frac > 0f) {
+            val pe = emph("progress")
             if (Feat.on("glow")) {
-                arc.color = Theme.withAlpha(progColor, 55); arc.strokeWidth = 36f * s
+                arc.color = Theme.withAlpha(progColor, 55); arc.strokeWidth = 36f * s * pe
                 c.drawArc(oval(210f), -225f, 270f * frac, false, arc)
-                arc.color = Theme.withAlpha(progColor, 115); arc.strokeWidth = 20f * s
+                arc.color = Theme.withAlpha(progColor, 115); arc.strokeWidth = 20f * s * pe
                 c.drawArc(oval(210f), -225f, 270f * frac, false, arc)
             }
-            arc.color = progColor; arc.strokeWidth = 11f * s
+            arc.color = progColor; arc.strokeWidth = 11f * s * pe
             c.drawArc(oval(210f), -225f, 270f * frac, false, arc)
         }
         // zona vermelha (limite) por cima
         if (redFrom != null) {
             val a0 = aOf(redFrom, vmin, vmax)
-            arc.color = cRedline; arc.strokeWidth = 11f * s
+            arc.color = cRedline; arc.strokeWidth = 11f * s * emph("redline")
             c.drawArc(oval(210f), a0 - 90f, aOf(vmax, vmin, vmax) - a0, false, arc)
         }
         // grifo
-        griffin()?.let { c.drawBitmap(it, null, RectF(cx - 256f * s, cy - 256f * s, cx + 256f * s, cy + 256f * s), bmpPaint) }
+        val gz = 256f * s * emph("griffin")
+        griffin()?.let { c.drawBitmap(it, null, RectF(cx - gz, cy - gz, cx + gz, cy + gz), bmpPaint) }
         // ticks + numeros
         stroke.color = cTick; stroke.strokeWidth = 2f * s
         val nminor = (majors.size - 1) * 2
@@ -525,7 +620,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             c.drawText(labels[i], x(g,174f), y(g,174f) + 9f * s, txt)
         }
         // leitura digital
-        txt.color = cText; txt.textSize = 60f * s
+        txt.color = cText; txt.textSize = 60f * s * emph("text")
         c.drawText(bigText, cx, cy + (374f - 256f) * s, txt)
         txt.color = cUnit; txt.textSize = 22f * s
         c.drawText(unit, cx, cy + (408f - 256f) * s, txt)
@@ -535,10 +630,11 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
         }
         // ponteiro
         val g = aOf(value, vmin, vmax)
+        val ns = s * emph("needle")
         c.save(); c.rotate(g, cx, cy)
         val p = Path()
-        p.moveTo(cx, cy + (70f - 256f) * s); p.lineTo(cx + (264f - 256f) * s, cy)
-        p.lineTo(cx, cy + (300f - 256f) * s); p.lineTo(cx + (248f - 256f) * s, cy); p.close()
+        p.moveTo(cx, cy + (70f - 256f) * ns); p.lineTo(cx + (264f - 256f) * ns, cy)
+        p.lineTo(cx, cy + (300f - 256f) * ns); p.lineTo(cx + (248f - 256f) * ns, cy); p.close()
         fill.color = cNeedle; c.drawPath(p, fill)
         c.restore()
         fill.color = Theme.darken(cBg, 0.2f); c.drawCircle(cx, cy, 20f * s, fill)

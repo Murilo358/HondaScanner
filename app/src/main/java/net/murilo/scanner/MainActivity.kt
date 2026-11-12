@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private val RETRY_SECS = 3
     private var countdown = RETRY_SECS
     private var customizer: LinearLayout? = null
+    private var coresBar: View? = null   // aba Cores: barra "o que está editando" flutuando NO TOPO da tela
     private var menuOverlay: View? = null
     private var menuCat = 0
     private var editOverlay: EditOverlay? = null
@@ -138,7 +139,13 @@ class MainActivity : Activity() {
     // ticker de 1s: mostra o status/contagem na tela e, com a conexão automática ligada,
     // reata a cada RETRY_SECS enquanto não houver scanner nem simulação.
     private val connTick = object : Runnable {
-        override fun run() { updateConnChip(); view.postDelayed(this, 1000) }
+        override fun run() {
+            updateConnChip()
+            // o grace do registro (fechar 15s após sumirem os dados) só roda dentro do tick();
+            // quando a conexão cai ninguém mais chama ele via pushHistory — o ticker assume
+            TripLogger.tick(view.dash)
+            view.postDelayed(this, 1000)
+        }
     }
 
     private fun startAutoConnect() {
@@ -447,6 +454,8 @@ class MainActivity : Activity() {
             content.removeAllViews()
             // shift light só aparece em rotação alta: na aba dele, força aceso pra dar pra ver/editar
             Theme.previewShift = (i == 3)
+            Theme.editKey = null   // aba Cores seta de novo ao abrir (elRefresh)
+            coresBar?.let { root.removeView(it) }; coresBar = null
             view.postInvalidate()
             content.addView(when (i) {
                 0 -> buildCores()
@@ -492,11 +501,17 @@ class MainActivity : Activity() {
         ))
         customizer = panel
         selectTab(0)
+        // o painel só redesenha quando chega dado novo; pro pisca do elemento em edição andar
+        // mesmo com tudo parado, força ~10 quadros/s enquanto o customizador está aberto
+        view.postDelayed(object : Runnable {
+            override fun run() { if (customizer != null) { view.invalidate(); view.postDelayed(this, 100) } }
+        }, 100)
     }
 
     private fun hideCustomizer() {
         customizer?.let { root.removeView(it) }; customizer = null
-        Theme.previewShift = false; view.postInvalidate()
+        coresBar?.let { root.removeView(it) }; coresBar = null
+        Theme.previewShift = false; Theme.editKey = null; view.postInvalidate()
     }
 
     /** Aba de ciclo (Fundo / Layout): ◀ nome ▶, aplica na hora. */
@@ -564,22 +579,26 @@ class MainActivity : Activity() {
             seeks[0]?.progress = Color.red(c); seeks[1]?.progress = Color.green(c); seeks[2]?.progress = Color.blue(c)
         }
         val elLabel = TextView(this).apply { setTextColor(Color.parseColor("#F2EDEB")); textSize = 15f; gravity = Gravity.CENTER; minWidth = dp(150) }
-        fun elRefresh() { elLabel.text = COLOR_ELEMENTS[ci].second; loadSliders(); updPreview() }
-        val elRow = rowH()
+        // o elemento selecionado PISCA no painel (ClusterRenderer) pra mostrar o que está sendo editado
+        fun elRefresh() { elLabel.text = COLOR_ELEMENTS[ci].second; loadSliders(); updPreview(); Theme.editKey = curKey(); view.postInvalidate() }
+        // "o que está editando" fica NO TOPO DA TELA (barra flutuante), não dentro do painel de baixo
+        val elRow = rowH().apply {
+            background = pill(Color.parseColor("#ee0D0A0A")); elevation = dp(12).toFloat()
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+        }
         elRow.addView(arrowBtn("◀") { ci = (ci - 1 + COLOR_ELEMENTS.size) % COLOR_ELEMENTS.size; elRefresh() })
         elRow.addView(elLabel)
         elRow.addView(arrowBtn("▶") { ci = (ci + 1) % COLOR_ELEMENTS.size; elRefresh() })
         elRow.addView(preview)
-        elRow.addView(Button(this).apply {
-            text = "⟲ padrão"; isAllCaps = false; textSize = 12f; setTextColor(Color.parseColor("#F2EDEB"))
-            background = pill(Color.parseColor("#33ffffff")); setPadding(dp(10), dp(2), dp(10), dp(2))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(12) }
-            setOnClickListener { Theme.reset(); elRefresh(); view.postInvalidate() }
-        })
-        col.addView(elRow)
+        root.addView(elRow, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ).apply { topMargin = dp(12) })
+        coresBar = elRow
+        // ordem: em cima O QUE edita (elRow), no meio o ajuste fino (R/G/B), embaixo AS CORES
         val sc = HorizontalScrollView(this); val swRow = rowH().apply { setPadding(0, dp(8), 0, dp(8)) }
         for (pc in PRESETS) swRow.addView(swatch(pc, dp(32)) { Theme.set(curKey(), pc); loadSliders(); updPreview(); view.postInvalidate() })
-        sc.addView(swRow); col.addView(sc)
+        sc.addView(swRow)
         val names = arrayOf("R", "G", "B")
         for (k in 0..2) {
             val r = rowH()
@@ -600,6 +619,16 @@ class MainActivity : Activity() {
             }
             seeks[k] = sb; r.addView(sb); col.addView(r)
         }
+        val swBar = rowH()
+        swBar.addView(sc, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        swBar.addView(Button(this).apply {
+            text = "⟲ padrão"; isAllCaps = false; textSize = 12f; setTextColor(Color.parseColor("#F2EDEB"))
+            background = pill(Color.parseColor("#33ffffff")); setPadding(dp(10), dp(2), dp(10), dp(2))
+            minWidth = 0; minimumWidth = 0; minHeight = dp(36); minimumHeight = dp(36)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(8) }
+            setOnClickListener { Theme.reset(); elRefresh(); view.postInvalidate() }
+        })
+        col.addView(swBar)
         elRefresh()
         return col
     }

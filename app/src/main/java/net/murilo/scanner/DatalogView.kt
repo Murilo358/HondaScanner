@@ -28,11 +28,16 @@ class DatalogView(context: Context) : View(context) {
     var trip: Trip? = null
         set(v) {
             field = v
+            mmCache.clear()
             // janela inicial ≈ 2 min, nunca menos que a viagem toda
             val total = ((v?.durationMs ?: 0L)).coerceAtLeast(1L)
             timeZoom = (total / 120_000f).coerceAtLeast(1f)
             requestLayout(); invalidate(); notifyWindow()
         }
+
+    // min/máx por canal calculado UMA vez por viagem (antes era a cada frame: 10 canais ×
+    // milhares de amostras em todo arrastar de dedo — o lag do Registro)
+    private val mmCache = HashMap<String, Pair<Float, Float>>()
     var channels: List<Channel> = emptyList()
         set(v) { field = v; requestLayout(); invalidate() }
     var index = 0
@@ -84,10 +89,14 @@ class DatalogView(context: Context) : View(context) {
         for ((bi, ch) in act.withIndex()) {
             val top = bi * laneH; val bot = top + laneH
             c.drawLine(0f, bot, width.toFloat(), bot, grid)
-            // min/max sobre a viagem toda (estável)
-            var mn = ch.fixedMin ?: Float.MAX_VALUE; var mx = ch.fixedMax ?: -Float.MAX_VALUE
-            if (ch.fixedMin == null || ch.fixedMax == null)
-                for (sm in s) { val v = ch.get(sm); if (ch.fixedMin == null && v < mn) mn = v; if (ch.fixedMax == null && v > mx) mx = v }
+            // min/max sobre a viagem toda (estável; cacheado por canal)
+            val mm = if (ch.fixedMin == null || ch.fixedMax == null) mmCache.getOrPut(ch.key) {
+                var a = Float.MAX_VALUE; var b = -Float.MAX_VALUE
+                for (sm in s) { val v = ch.get(sm); if (v < a) a = v; if (v > b) b = v }
+                a to b
+            } else null
+            val mn = ch.fixedMin ?: mm!!.first
+            var mx = ch.fixedMax ?: mm!!.second
             if (mx - mn < 1e-3f) mx = mn + 1f
             val gTop = top + 7f * d; val gBot = bot - 7f * d
             fun yOf(v: Float) = gBot - ((v - mn) / (mx - mn)) * (gBot - gTop)
@@ -96,14 +105,16 @@ class DatalogView(context: Context) : View(context) {
             var firstX = 0f; var lastX = 0f
             val visible = (s.size / timeZoom).toInt().coerceAtLeast(1)
             val step = (visible / width.coerceAtLeast(1)).coerceAtLeast(1)
-            var i = 0
+            // pula direto pra 1ª amostra da janela (busca binária) e para ao sair dela,
+            // em vez de varrer a viagem inteira por canal a cada frame
+            val tEnd = wt1 + span * 0.02
+            var i = lowerBound(s, wt0 - span * 0.02)
             while (i < s.size) {
                 val sm = s[i]
-                if (sm.t >= wt0 - span * 0.02 && sm.t <= wt1 + span * 0.02) {
-                    val x = xOf(sm.t.toDouble()); val y = yOf(ch.get(sm))
-                    if (!started) { path.moveTo(x, y); firstX = x; started = true } else path.lineTo(x, y)
-                    lastX = x
-                }
+                if (sm.t > tEnd) break
+                val x = xOf(sm.t.toDouble()); val y = yOf(ch.get(sm))
+                if (!started) { path.moveTo(x, y); firstX = x; started = true } else path.lineTo(x, y)
+                lastX = x
                 i += step
             }
             if (started) {
@@ -124,6 +135,13 @@ class DatalogView(context: Context) : View(context) {
         }
         // cursor fixo no centro
         c.drawLine(cx, 0f, cx, height.toFloat(), cursorP)
+    }
+
+    /** 1º índice com t >= alvo (amostras ordenadas no tempo). */
+    private fun lowerBound(s: List<TripSample>, t: Double): Int {
+        var lo = 0; var hi = s.size
+        while (lo < hi) { val mid = (lo + hi) / 2; if (s[mid].t < t) lo = mid + 1 else hi = mid }
+        return lo
     }
 
     private fun fmt(v: Float, ch: Channel) =
