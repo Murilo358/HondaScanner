@@ -23,30 +23,40 @@ class Trip(val file: File, val samples: List<TripSample>) {
     /**
      * Pontos de GPS LIMPOS para mapa/imagem/distância. O cru vira "teia de aranha":
      * parado, o GPS deriva em volta do ponto; e fixes ruins teleportam o carro.
-     * Regras: parado (<3 km/h) não cria ponto novo; fix só entra se couber no ORÇAMENTO
-     * de distância do carro — velocidade do OBD × tempo × 1.5 + 12 m de erro de GPS;
-     * e um fix FORA do orçamento (salto) só é aceito se os 5 fixes seguintes confirmarem
-     * o lugar novo (todos a <100 m um do outro) — túnel/garagem ressincroniza em ~1 s,
-     * fix podre isolado ou espalhado nunca entra (antes, 2 s de lixo já "realocava").
+     * Regras (calibradas com 4 viagens reais do Civic em 2026-11):
+     * - parado (<3 km/h) não cria ponto novo;
+     * - fix só entra se couber no ODÔMETRO da ECU: soma de velocidade×tempo de TODAS as
+     *   amostras desde o último ponto aceito (o OBD loga a 1 Hz mesmo com GPS ruim),
+     *   ×1.5 de folga + 12 m de erro — andar mais que o carro andou é fisicamente impossível.
+     *   Velocidade×dt só do par de pontos (versão antiga) inflava em vão longo de GPS;
+     * - realocação (âncora errada): fix fora do orçamento precisa de 5 fixes seguintes
+     *   consistentes (<100 m entre si) E carro a ≥15 km/h — multipath consistente acontece
+     *   parado/se arrastando (era TODO salto que sobrava); túnel/garagem se resolve pelo
+     *   odômetro ou realoca assim que o carro anda de verdade.
      */
     val route: List<TripSample> by lazy {
         val out = ArrayList<TripSample>()
         var last: TripSample? = null
         var pend: TripSample? = null   // candidato de realocação (salto a confirmar)
         var pendN = 0
+        var odo = 0.0                  // metros rodados (ECU) desde o último ponto aceito
+        var prevT = -1L; var prevSpd = 0f
         for (s in samples) {
+            if (prevT >= 0) odo += maxOf(s.speed, prevSpd) / 3.6 * (s.t - prevT) / 1000.0
+            prevT = s.t; prevSpd = s.speed
             if (s.lat == 0.0 && s.lon == 0.0) continue
             val l = last
-            if (l == null) { out.add(s); last = s; continue }
+            if (l == null) { out.add(s); last = s; odo = 0.0; continue }
             val d = haversine(l.lat, l.lon, s.lat, s.lon)
             val dt = (s.t - l.t) / 1000.0
             if (s.speed < 3f && d < 150) continue
-            val budget = maxOf(s.speed, l.speed) / 3.6 * dt * 1.5 + 12.0
-            if (dt <= 0 || d <= budget) { out.add(s); last = s; pend = null; pendN = 0; continue }
+            val budget = odo * 1.5 + 12.0
+            if (dt <= 0 || d <= budget) { out.add(s); last = s; pend = null; pendN = 0; odo = 0.0; continue }
             val p = pend
             if (p != null && haversine(p.lat, p.lon, s.lat, s.lon) < 100.0) {
                 pendN++
-                if (pendN >= 5) { out.add(s); last = s; pend = null; pendN = 0 } else pend = s
+                if (pendN >= 5 && s.speed >= 15f) { out.add(s); last = s; pend = null; pendN = 0; odo = 0.0 }
+                else pend = s
             } else { pend = s; pendN = 1 }
         }
         out
