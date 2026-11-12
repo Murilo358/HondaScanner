@@ -24,7 +24,7 @@ object Widgets {
         Spec("t_rpmn", "RPM (numero)", 0.16f, 0.19f),
         Spec("t_spdn", "Velocidade (numero)", 0.18f, 0.19f),
         Spec("clock", "Relogio", 0.13f, 0.12f),
-        Spec("grif", "Grifo", 0.13f, 0.35f)
+        Spec("grif", "Arte (grifo/gato/fogo)", 0.13f, 0.35f)
     )
 
     fun specOf(type: String) = catalog.firstOrNull { it.type == type }

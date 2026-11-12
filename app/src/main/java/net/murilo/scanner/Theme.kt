@@ -39,6 +39,7 @@ object Theme {
     @Volatile var shiftEnabled = true
     @Volatile var menuBg = DEF_MENU_BG
     @Volatile var menuAccent = DEF_MENU_ACCENT
+    @Volatile var gaugeArt = 0   // arte central dos mostradores: 0 grifo, 1 gato, 2 fogo
     @Volatile var previewShift = false   // customizador: força o shift light aceso (não persiste)
     @Volatile var editKey: String? = null   // customizador: elemento em edição pisca no painel (não persiste)
 
@@ -56,6 +57,12 @@ object Theme {
         shiftRpm = p.getInt("shiftRpm", DEF_SHIFT_RPM)
         shiftEnabled = p.getBoolean("shiftEnabled", true)
         menuBg = p.getInt("menuBg", DEF_MENU_BG); menuAccent = p.getInt("menuAccent", DEF_MENU_ACCENT)
+        gaugeArt = p.getInt("gaugeArt", 0)
+    }
+
+    fun saveGaugeArt(i: Int) {
+        gaugeArt = i
+        try { ctx?.getSharedPreferences(PREF, Context.MODE_PRIVATE)?.edit()?.putInt("gaugeArt", i)?.apply() } catch (_: Exception) {}
     }
 
     fun get(key: String) = when (key) {
@@ -86,7 +93,7 @@ object Theme {
         bg = DEF_BG; ring = DEF_RING; progress = DEF_PROGRESS; needle = DEF_NEEDLE
         redline = DEF_REDLINE; text = DEF_TEXT; griffin = DEF_GRIFFIN
         shiftColor = DEF_SHIFT_COLOR; shiftRpm = DEF_SHIFT_RPM; shiftEnabled = true
-        menuBg = DEF_MENU_BG; menuAccent = DEF_MENU_ACCENT
+        menuBg = DEF_MENU_BG; menuAccent = DEF_MENU_ACCENT; gaugeArt = 0
         try { ctx?.getSharedPreferences(PREF, Context.MODE_PRIVATE)?.edit()?.clear()?.apply() } catch (_: Exception) {}
     }
 
