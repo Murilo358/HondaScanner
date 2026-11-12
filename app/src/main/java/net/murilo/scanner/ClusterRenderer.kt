@@ -44,6 +44,7 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
     private val dens = context.resources.displayMetrics.density.coerceAtLeast(1f)
     private val font = numFont ?: Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     private var griffinBmp: Bitmap? = null
+    private var griffinArt = -1
     private var bgTexBmp: Bitmap? = null
     private var bgTexIdx = -1
 
@@ -87,12 +88,17 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
 
     init { txt.typeface = font; txtL.typeface = font; txtR.typeface = font }
 
+    /** Arte central dos mostradores (grifo/gato/fogo), cinza; a cor vem do tint em bmpPaint. */
     private fun griffin(): Bitmap? {
-        griffinBmp?.let { return it }
-        val dr = AppCompatResources.getDrawable(context, R.drawable.gauge_griffin_gray) ?: return null
+        if (griffinArt == Theme.gaugeArt) griffinBmp?.let { return it }
+        val id = when (Theme.gaugeArt) {
+            1 -> R.drawable.gauge_gato_gray; 2 -> R.drawable.gauge_fogo_gray
+            else -> R.drawable.gauge_griffin_gray
+        }
+        val dr = AppCompatResources.getDrawable(context, id) ?: return null
         val b = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
         dr.setBounds(0, 0, 512, 512); dr.draw(Canvas(b))
-        griffinBmp = b; return b
+        griffinBmp = b; griffinArt = Theme.gaugeArt; return b
     }
 
     private fun resolveTheme() {
@@ -602,8 +608,9 @@ class ClusterRenderer(private val context: Context, numFont: Typeface? = null) {
             arc.color = cRedline; arc.strokeWidth = 11f * s * emph("redline")
             c.drawArc(oval(210f), a0 - 90f, aOf(vmax, vmin, vmax) - a0, false, arc)
         }
-        // grifo
-        val gz = 256f * s * emph("griffin")
+        // arte central: as três preenchem o disco (r246 do canvas 512); 204 encaixa a arte
+        // dentro do anel de RPM, sem lavar ring/ticks
+        val gz = 204f * s * emph("griffin")
         griffin()?.let { c.drawBitmap(it, null, RectF(cx - gz, cy - gz, cx + gz, cy + gz), bmpPaint) }
         // ticks + numeros
         stroke.color = cTick; stroke.strokeWidth = 2f * s

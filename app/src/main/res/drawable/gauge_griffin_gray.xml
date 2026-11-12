@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Arte do grifo (NFS Underground 2). Gerado de app_gauge_parts/gauge_full.svg. -->
+<!-- Arte do grifo (NFS Underground 2, pack PLUS Gauges). Reescalada pra preencher o disco (igual gato/fogo) + halo em degradê. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="512dp" android:height="512dp"
     android:viewportWidth="512" android:viewportHeight="512">
-    <group android:translateX="102.00" android:translateY="102.28" android:scaleX="0.27798" android:scaleY="0.27798">
+    <group android:translateX="6.61" android:translateY="6.38" android:scaleX="0.45221" android:scaleY="0.45221">
         <path android:fillColor="#1d2023" android:fillType="evenOdd"
             android:pathData="M 726 1067 L 706 1065 L 564 995 L 524 1004 L 515 1021 L 512 1045 L 502 1049 L 385 1024 L 315 992 L 252 953 L 170 877 L 119 802 L 78 720 L 54 621 L 54 501 L 63 440 L 104 324 L 177 217 L 230 168 L 325 103 L 435 62 L 494 54 L 621 54 L 721 79 L 794 112 L 868 161 L 941 236 L 978 290 L 1007 268 L 1017 270 L 1054 340 L 1077 408 L 1095 508 L 1094 609 L 1069 722 L 1026 819 L 966 905 L 904 967 L 820 1026 L 726 1067 Z"/>
         <path android:fillColor="#55595e" android:fillType="evenOdd"
@@ -15,4 +15,23 @@
         <path android:fillColor="#7c8389" android:fillType="evenOdd"
             android:pathData="M 597 1096 L 493 1095 L 380 1070 L 299 1036 L 203 972 L 129 898 L 67 804 L 26 701 L 8 604 L 8 498 L 26 401 L 67 299 L 130 204 L 218 119 L 300 67 L 402 26 L 499 8 L 602 8 L 662 17 L 725 33 L 802 66 L 866 105 L 922 151 L 987 222 L 1009 254 L 1008 264 L 978 290 L 941 236 L 866 159 L 795 112 L 720 78 L 621 54 L 531 53 L 437 62 L 385 79 L 299 118 L 212 183 L 177 217 L 119 298 L 95 343 L 62 443 L 54 502 L 54 620 L 79 721 L 111 788 L 167 874 L 220 927 L 262 960 L 346 1009 L 442 1040 L 507 1049 L 526 1003 L 554 995 L 584 1003 L 713 1070 L 667 1085 L 597 1096 Z"/>
     </group>
+    <!-- halo em degradê (como o do gato) -->
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.048" android:fillType="evenOdd"
+            android:pathData="M 102,256 a 154,154 0 1,0 308,0 a 154,154 0 1,0 -308,0 Z M 114,256 a 142,142 0 1,0 284,0 a 142,142 0 1,0 -284,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.105" android:fillType="evenOdd"
+            android:pathData="M 90,256 a 166,166 0 1,0 332,0 a 166,166 0 1,0 -332,0 Z M 102,256 a 154,154 0 1,0 308,0 a 154,154 0 1,0 -308,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.179" android:fillType="evenOdd"
+            android:pathData="M 78,256 a 178,178 0 1,0 356,0 a 178,178 0 1,0 -356,0 Z M 90,256 a 166,166 0 1,0 332,0 a 166,166 0 1,0 -332,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.267" android:fillType="evenOdd"
+            android:pathData="M 66,256 a 190,190 0 1,0 380,0 a 190,190 0 1,0 -380,0 Z M 78,256 a 178,178 0 1,0 356,0 a 178,178 0 1,0 -356,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.367" android:fillType="evenOdd"
+            android:pathData="M 54,256 a 202,202 0 1,0 404,0 a 202,202 0 1,0 -404,0 Z M 66,256 a 190,190 0 1,0 380,0 a 190,190 0 1,0 -380,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.371" android:fillType="evenOdd"
+            android:pathData="M 42,256 a 214,214 0 1,0 428,0 a 214,214 0 1,0 -428,0 Z M 54,256 a 202,202 0 1,0 404,0 a 202,202 0 1,0 -404,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.282" android:fillType="evenOdd"
+            android:pathData="M 32,256 a 224,224 0 1,0 448,0 a 224,224 0 1,0 -448,0 Z M 42,256 a 214,214 0 1,0 428,0 a 214,214 0 1,0 -428,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.201" android:fillType="evenOdd"
+            android:pathData="M 22,256 a 234,234 0 1,0 468,0 a 234,234 0 1,0 -468,0 Z M 32,256 a 224,224 0 1,0 448,0 a 224,224 0 1,0 -448,0 Z"/>
+        <path android:fillColor="#f4f4f4" android:fillAlpha="0.112" android:fillType="evenOdd"
+            android:pathData="M 10,256 a 246,246 0 1,0 492,0 a 246,246 0 1,0 -492,0 Z M 22,256 a 234,234 0 1,0 468,0 a 234,234 0 1,0 -468,0 Z"/>
 </vector>

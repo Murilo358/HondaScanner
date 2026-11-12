@@ -399,7 +399,7 @@ class MainActivity : Activity() {
     )
     private val COLOR_ELEMENTS = listOf(
         "bg" to "Fundo", "ring" to "Anel", "progress" to "Preenchimento", "needle" to "Ponteiro",
-        "redline" to "Zona vermelha", "text" to "Texto", "griffin" to "Grifo"
+        "redline" to "Zona vermelha", "text" to "Texto", "griffin" to "Arte"
     )
 
     private fun arrowBtn(t: String, onClick: () -> Unit) = Button(this).apply {
@@ -444,7 +444,7 @@ class MainActivity : Activity() {
         val content = FrameLayout(this)
         val tabsRow = rowH()
         val tabsInner = rowH()
-        val tabNames = listOf("Cores", "Fundo", "Elementos", "Shift", "Layout")
+        val tabNames = listOf("Cores", "Fundo", "Arte", "Elementos", "Shift", "Layout")
         val tabBtns = ArrayList<Button>()
         fun selectTab(i: Int) {
             tabBtns.forEachIndexed { idx, b ->
@@ -453,15 +453,16 @@ class MainActivity : Activity() {
             }
             content.removeAllViews()
             // shift light só aparece em rotação alta: na aba dele, força aceso pra dar pra ver/editar
-            Theme.previewShift = (i == 3)
+            Theme.previewShift = (i == 4)
             Theme.editKey = null   // aba Cores seta de novo ao abrir (elRefresh)
             coresBar?.let { root.removeView(it) }; coresBar = null
             view.postInvalidate()
             content.addView(when (i) {
                 0 -> buildCores()
                 1 -> buildCycle(BgTex.labels, { BgTex.selected }, { BgTex.set(it) })
-                2 -> buildElementos()
-                3 -> buildShift()
+                2 -> buildCycle(listOf("Grifo", "Gato", "Fogo"), { Theme.gaugeArt }, { Theme.saveGaugeArt(it) })
+                3 -> buildElementos()
+                4 -> buildShift()
                 else -> buildLayoutTab()
             })
         }
