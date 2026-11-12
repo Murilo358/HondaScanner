@@ -8,7 +8,7 @@ Funciona **no celular** — e, se você quiser, também na **tela da multimídia
 
 ---
 
-## 📲 Instalar no celular
+##  Instalar no celular
 
 1. Baixe o **`Scanner-vX.apk`** mais novo em **[Releases](https://github.com/Murilo358/HondaScanner/releases)**.
 2. Abra o arquivo baixado e confirme a instalação
@@ -26,7 +26,7 @@ Funciona **no celular** — e, se você quiser, também na **tela da multimídia
 
 ---
 
-## 🚗 Usar na multimídia (Android Auto) — opcional
+## Usar na multimídia (Android Auto) — opcional
 
 O Android Auto só mostra apps que ele acredita terem vindo da Google Play, então colocar o Scanner lá
 pede um passo extra — que **depende da versão do Android** do aparelho onde o Scanner está instalado:
@@ -74,7 +74,7 @@ ele oferece o seletor próprio pra achar e parear o scanner (nome OBD/VHM/CAR, P
 ---
 
 <details>
-<summary><b>🛠️ Para desenvolvedores</b> (compilar, estrutura, gotchas)</summary>
+<summary><b> Para desenvolvedores</b> (compilar, estrutura, gotchas)</summary>
 
 ### Compilar
 
