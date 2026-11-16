@@ -149,7 +149,9 @@ central NWD: `com.bt.ACTION_START_SERVICE` → binder `com.bt.BTFeature`, SPP cr
 embutido) · `assets/Scanner.apk` (cópia do app, reembutida a cada build).
 
 **Protocolo OBD‑1 (resumo):** Bluetooth SPP/RFCOMM. Leitura `20 05 <addr> <len> <ck>`, resposta
-`00 <L> <dados> <ck>`; limpar DTC `21 04 01 <ck>`.
+`00 <L> <dados> <ck>`; limpar DTC `21 04 01 <ck>`. Comandos e endereços conforme a documentação
+pública [Honda-ECU-Data](https://github.com/andgarriv/Honda-ECU-Data), conferidos com capturas
+Bluetooth próprias do barramento e log de motor ligado.
 
 ### Gotchas
 
